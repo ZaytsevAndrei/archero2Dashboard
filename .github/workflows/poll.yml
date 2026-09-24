@@ -38,6 +38,7 @@ jobs:
             echo "Нет новых данных — нечего коммитить."
           else
             git commit -m "data: update from telegram bot"
+            git pull --rebase origin main
             git push
           fi
 

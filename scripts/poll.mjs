@@ -49,6 +49,11 @@ if (existsSync(DATA_FILE)) {
   catch (e) { console.error('docs/data.json повреждён, старт с пустого:', e.message); data = emptyData(); }
 } else { data = emptyData(); }
 
+// снимок значимых полей: если не изменились — файл не трогаем (иначе коммит каждые 5 минут)
+const DATA_KEYS = ['offset', 'state', 'users', 'entries'];
+const snapshot = () => JSON.stringify(DATA_KEYS.map((k) => data[k]));
+const initialSnapshot = snapshot();
+
 function saveData() {
   data.updatedAt = new Date().toISOString();
   mkdirSync(path.dirname(DATA_FILE), { recursive: true });
@@ -269,8 +274,8 @@ async function main() {
     }
   }
   if (processed) console.log(`Обработано апдейтов: ${processed}, записей всего: ${data.entries.filter((e) => !e.demo).length}`);
-  else console.log('Новых сообщений нет.');
-  saveData();
+  if (snapshot() !== initialSnapshot) saveData();
+  else console.log('Новых сообщений нет, данные не менялись — коммита не будет.');
   if (apiErrors > 5) process.exitCode = 1;
 }
 main();
