@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unity — Календарь урона · Archero 2</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 <header>
@@ -35,14 +35,14 @@
 
   <section class="panel">
     <h2>Календарь урона</h2>
-    <div id="calendars"></div>
-    <p class="hint">Ячейка — урон за день. Цвет — от зелёного (мало) к красному (рекорд месяца игрока). Клик по ячейке с числом — доказательство (скриншот). Повторная отправка за тот же день перезаписывает значение.</p>
+    <div id="calendar"></div>
+    <p class="hint">Ячейка — сумма урона гильдии за день, цвет — от зелёного (мало) к красному (рекорд месяца). Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
   </section>
 
   <section class="panel today-panel">
-    <h2 id="today-title">Сегодня</h2>
-    <ol id="today-list" class="leaderboard today-list"></ol>
-    <div id="today-total" class="today-total"></div>
+    <h2 id="day-title">—</h2>
+    <ol id="day-list" class="leaderboard day-list"></ol>
+    <div id="day-total" class="today-total"></div>
   </section>
 
   <section class="panel">
@@ -71,6 +71,6 @@
   </div>
 </div>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
