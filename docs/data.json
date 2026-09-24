@@ -1,11 +1,14 @@
 {
-  "offset": 535524552,
-  "state": {
+  "offset": 535524556,
+  "state": {},
+  "users": {
     "176147068": {
-      "await": "nick"
+      "nick": "Dragon",
+      "joined": "2026-09-24T13:51:22.877Z",
+      "tgUsername": "katoteshikuza",
+      "first": "Андрей"
     }
   },
-  "users": {},
   "entries": [
     {
       "id": "demo1",
@@ -116,5 +119,5 @@
       "demo": true
     }
   ],
-  "updatedAt": "2026-09-24T11:26:41.909Z"
+  "updatedAt": "2026-09-24T13:51:26.875Z"
 }
