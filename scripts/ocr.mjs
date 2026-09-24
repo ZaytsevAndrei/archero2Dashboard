@@ -68,9 +68,11 @@ export async function ocrOwnRow(imagePath, nick) {
   try { img = await Jimp.read(imagePath); } catch { return null; }
   const { width, height } = img.bitmap;
 
-  // область списка рейтинга (шапка/подвал с кнопками не нужны)
+  // область рейтинга: от шапки до нижней панели с кнопками (~12% снизу).
+  // Своя строка может быть где угодно по высоте — у каждого свой ранг,
+  // нижняя часть экрана тоже нужна (внизу видны цифры отправителя).
   const list = img.clone().crop({
-    x: 0, y: Math.floor(height * 0.15), w: width, h: Math.ceil(height * 0.62),
+    x: 0, y: Math.floor(height * 0.12), w: width, h: Math.ceil(height * 0.76),
   });
   list.resize({ w: width * 3 });
   list.greyscale();
@@ -90,16 +92,19 @@ export async function ocrOwnRow(imagePath, nick) {
       words.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
     }
     const lines = groupLines(words);
-    // склейка соседних строк: урон может быть на строке выше или ниже ника
-    // (у топ-3 пьедестала урон над ником, у обычных строк — в той же или следующей)
+    const clean = (t) => t.replace(/^[^A-Za-zА-Яа-я0-9]+|[^A-Za-zА-Яа-я0-9]+$/g, ''); // срезать мусор вида «+¥DonMaxone»
+    const nickRe = /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/;
+    const isNick = (t) => { const c = clean(t); return nickRe.test(c) && lev(c.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34); };
+    const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
+    const dmgOf = (toks) => toks.map(parseDamageToken).find(Boolean) || null;
+
+    // приоритет ассоциации «ник → урон»: своя строка → следующая → предыдущая
+    // (у обычных строк урон в той же/следующей строке, у пьедестала — строкой выше)
     const rows = [];
     for (let i = 0; i < lines.length; i++) {
-      const joined = [lines[i - 1], lines[i], lines[i + 1]]
-        .filter(Boolean).map(l => l.words.map(w => w.text).join(' ')).join(' ');
-      const toks = joined.split(/\s+/);
-      const dmgTok = toks.map(parseDamageToken).find(Boolean);
-      const nickTok = toks.find(t => /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/.test(t) && lev(t.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34));
-      if (dmgTok && nickTok) rows.push(dmgTok);
+      if (!toksOf(lines[i]).some(isNick)) continue;
+      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || dmgOf(toksOf(lines[i - 1]));
+      if (d) rows.push(d);
     }
     if (!rows.length) return null;
     rows.sort((a, b) => b.dmg - a.dmg); // если ник попал в несколько строк — берём максимум
