@@ -33,7 +33,7 @@ jobs:
         run: |
           git config user.name  "damage-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/data.json docs/proofs
+          git add -A docs/
           if git diff --cached --quiet; then
             echo "Нет новых данных — нечего коммитить."
           else
