@@ -7,7 +7,7 @@
  * Логика бота:
  *   /start        → приветствие + запрос игрового ника
  *   ник текстом   → регистрация
- *   видео/фото    → «теперь пришли урон»
+ *   фото-скрин   → «теперь пришли урон»
  *   «5.91T»       → запись урона за сегодня (повторная отправка за тот же день перезаписывает)
  *   /nick Имя     → сменить ник
  *   /undo         → удалить свою последнюю запись
@@ -18,8 +18,7 @@
  *               запутанный fallback (только для MVP; задайте секрет и перегенерируйте токен).
  *   SITE_URL  — ссылка на сайт, упомянутая в /help (по умолчанию GitHub Pages этого репо).
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
@@ -102,24 +101,9 @@ async function downloadProof(fileId, updateId) {
     const url = `https://api.telegram.org/file/bot${TOKEN}/${f.file_path}`;
     const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
     mkdirSync(PROOFS_DIR, { recursive: true });
-    const ext = f.file_path.endsWith('.mp4') ? '.mp4' : path.extname(f.file_path) || '.jpg';
-    const tmp = path.join(PROOFS_DIR, `tmp_${updateId}${ext}`);
-    writeFileSync(tmp, buf);
-    if (ext === '.mp4') {
-      // один кадр из видео как пруф
-      const jpg = path.join(PROOFS_DIR, `p_${updateId}.jpg`);
-      try {
-        execFileSync('ffmpeg', ['-y', '-ss', '1', '-i', tmp, '-frames:v', '1', '-vf', 'scale=720:-2', '-q:v', '5', jpg], { stdio: 'ignore' });
-        unlinkSync(tmp);
-        return path.relative(path.join(ROOT, 'docs'), jpg).replace(/\\/g, '/');
-      } catch {
-        try { unlinkSync(tmp); } catch {}
-        return null; // ffmpeg недоступен или битое видео — пруф опускаем
-      }
-    }
+    const ext = path.extname(f.file_path) || '.jpg';
     const fin = path.join(PROOFS_DIR, `p_${updateId}${ext}`);
-    writeFileSync(fin, readFileSync(tmp));
-    unlinkSync(tmp);
+    writeFileSync(fin, buf);
     return path.relative(path.join(ROOT, 'docs'), fin).replace(/\\/g, '/');
   } catch (e) { console.error('proof download failed:', e.message); return null; }
 }
@@ -133,7 +117,7 @@ function handleCommand(msg) {
   if (c === 'start') {
     delete data.state[uid];
     if (user) {
-      send(msg.chat.id, `Ты уже зарегистрирован: ${user.nick}.\n\nПросто отправь видео рейтинга, а следом — урон, например: 5.91T`);
+      send(msg.chat.id, `Ты уже зарегистрирован: ${user.nick}.\n\nПросто отправь скриншот рейтинга (фото), а следом — урон, например: 5.91T`);
     } else {
       data.state[uid] = { await: 'nick' };
       send(msg.chat.id, 'Привет! Это бот календаря урона гильдии 🏹\n\nНапиши свой игровой ник (как в Archero 2):');
@@ -149,7 +133,7 @@ function handleCommand(msg) {
       '/stats — мои записи за 7 дней',
       '',
       'Как отметиться:',
-      '1) отправь видео/скрин рейтинга (по желанию, для пруфа)',
+      '1) отправь скриншот рейтинга (фото — доказательство)',
       '2) отправь урон, например: 5.91T или 209.77T',
       '',
       `Сайт: ${SITE_URL}`,
@@ -161,7 +145,7 @@ function handleCommand(msg) {
     if (!nick) { send(msg.chat.id, user ? `Твой ник: ${user.nick}. Сменить: /nick НовыйНик` : 'Сначала /start'); return; }
     if (nick.length > 24) { send(msg.chat.id, 'Ник слишком длинный (макс. 24 символа)'); return; }
     if (user) { user.nick = nick; send(msg.chat.id, `Ник изменён: ${nick}`); }
-    else { data.users[uid] = { nick, joined: new Date().toISOString() }; send(msg.chat.id, `Записал: ${nick}. Теперь отправь видео и урон!`); }
+    else { data.users[uid] = { nick, joined: new Date().toISOString() }; send(msg.chat.id, `Записал: ${nick}. Теперь отправь скриншот (фото) и урон!`); }
     return;
   }
   if (c === 'undo') {
@@ -195,12 +179,16 @@ async function handleMessage(msg) {
 
   if (msg.text && msg.text.startsWith('/')) { handleCommand(msg); return; }
 
-  // медиа → ждём урон
-  const fileId = msg.video?.file_id || msg.photo?.at(-1)?.file_id || msg.animation?.file_id;
+  // медиа → ждём урон (доказательство — скриншот/фото)
+  if (msg.video || msg.animation) {
+    send(msg.chat.id, 'Видео не принимаем 🙈 Пришли, пожалуйста, скриншот рейтинга картинкой — и следом урон, например: 5.91T');
+    return;
+  }
+  const fileId = msg.photo?.at(-1)?.file_id;
   if (fileId) {
     if (!data.users[uid]) { data.state[uid] = { await: 'nick' }; send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):'); return; }
     data.state[uid] = { await: 'damage', fileId };
-    send(msg.chat.id, 'Видео получил! Теперь напиши свой урон, например: 5.91T');
+    send(msg.chat.id, 'Скрин получил! Теперь напиши свой урон, например: 5.91T');
     return;
   }
 
@@ -212,7 +200,7 @@ async function handleMessage(msg) {
     if (text.length > 24 || /[\n]/.test(text) || parseDamage(text)) { send(msg.chat.id, 'Это похоже не на ник. Напиши игровой ник (до 24 символов):'); return; }
     data.users[uid] = { nick: text, joined: new Date().toISOString(), ...meta };
     delete data.state[uid];
-    send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь отправь видео рейтинга (по желанию), а следом — урон, например: 5.91T\nВсё автоматически попадёт на сайт.`);
+    send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь отправь скриншот рейтинга (фото), а следом — урон, например: 5.91T\nВсё автоматически попадёт на сайт.`);
     return;
   }
 

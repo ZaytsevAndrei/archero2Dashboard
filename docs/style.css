@@ -20,11 +20,11 @@ body {
   color: var(--text);
   font: 15px/1.5 system-ui, "Segoe UI", Roboto, Arial, sans-serif;
 }
-main { max-width: 1100px; margin: 0 auto; padding: 16px 16px 64px; }
+main { max-width: 780px; margin: 0 auto; padding: 16px 16px 64px; }
 
 header {
   padding: 22px 16px 14px;
-  max-width: 1100px;
+  max-width: 780px;
   margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
@@ -73,7 +73,7 @@ header {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -106,59 +106,89 @@ header {
 }
 .hint { color: var(--muted); font-size: 13px; }
 
-.table-wrap { overflow-x: auto; border-radius: 10px; }
-table { border-collapse: separate; border-spacing: 3px; width: 100%; min-width: 720px; }
-th, td { white-space: nowrap; }
-thead th {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 7px;
-  text-align: center;
-}
-thead th.nick-col, td.nick { text-align: left; padding-left: 8px; }
-td.nick {
+/* ---------- календарь по игрокам ---------- */
+.cal-block {
   background: var(--panel-2);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  margin-bottom: 14px;
+}
+.cal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cal-nick { font-size: 16.5px; font-weight: 800; }
+.cal-meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.cal-weekdays, .cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-weekdays { margin-bottom: 4px; }
+.cal-weekdays span {
+  text-align: center;
+  font-size: 11.5px;
   font-weight: 600;
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  padding: 8px 14px 8px 8px;
-  max-width: 150px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.cal-weekdays span.wend { color: #b96a6a; }
+
+.cal-cell {
+  position: relative;
+  min-height: 54px;
+  border-radius: 9px;
+  background: var(--cell-empty);
+  padding: 5px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+.cal-cell.off { background: transparent; }
+.cal-cell.future { opacity: .35; }
+.cal-cell.today { outline: 1.5px solid rgba(245, 185, 66, .8); }
+.cal-cell .cal-num { font-size: 11px; color: var(--muted); line-height: 1; }
+.cal-cell .cal-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-thead th.today-col, td.today-cell { outline: 1px solid rgba(245, 185, 66, .55); border-radius: 8px; }
-td.cell {
-  background: var(--cell-empty);
-  border-radius: 8px;
-  padding: 8px 9px;
+.cal-cell.has { cursor: pointer; }
+.cal-cell.has:hover { filter: brightness(1.3); }
+.cal-cell.demo-cell .cal-val { font-style: italic; opacity: .75; }
+
+.cal-empty {
   text-align: center;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  cursor: default;
+  color: var(--muted);
+  padding: 34px 10px;
+  line-height: 1.8;
 }
-td.cell.has { cursor: pointer; font-weight: 600; }
-td.cell.has:hover { filter: brightness(1.25); }
-td.cell.demo-cell { opacity: .55; font-style: italic; }
-td.sum {
-  background: var(--panel-2);
-  border-radius: 8px;
-  padding: 8px 10px;
+.cal-empty a { color: var(--accent); }
+
+/* ---------- панель «Сегодня» ---------- */
+.today-panel h2 { display: flex; justify-content: space-between; align-items: baseline; }
+.today-total {
+  margin-top: 12px;
   text-align: right;
   font-weight: 800;
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
-tfoot td {
-  color: var(--muted);
-  font-size: 12px;
-  padding: 4px 7px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-tfoot td.nick { color: var(--muted); font-weight: 600; }
+.today-none { color: var(--muted); padding: 6px 2px; }
+.demo-note { color: var(--muted); font-size: 12px; }
 
+/* ---------- рейтинги ---------- */
 .leaderboard { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .leaderboard li {
   background: var(--panel-2);
@@ -227,4 +257,10 @@ tfoot td.nick { color: var(--muted); font-weight: 600; }
   .brand { font-size: 19px; }
   .updated { margin-left: 0; width: 100%; }
   .card span { font-size: 20px; }
+  .cal-block { padding: 10px 10px 12px; }
+  .cal-grid, .cal-weekdays { gap: 3px; }
+  .cal-cell { min-height: 44px; padding: 3px 3px 2px; border-radius: 7px; }
+  .cal-cell .cal-val { font-size: 10px; letter-spacing: -0.2px; }
+  .cal-cell .cal-num { font-size: 10px; }
+  .cal-weekdays span { font-size: 10px; }
 }

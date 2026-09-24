@@ -4,6 +4,9 @@
 
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 const state = {
   raw: { entries: [], users: {}, updatedAt: null },
@@ -24,7 +27,7 @@ function fmtDmg(dmg) {
   }
   return String(dmg);
 }
-function fmtShort(dmg) { // компактно для ячеек: 5.91T → 5.91T, 209.77T → 210T
+function fmtShort(dmg) { // компактно для ячеек: 209.77T → 210T, 5.91T → 5.91T
   const s = fmtDmg(dmg);
   return s.length > 6 ? fmtDmg(Math.round(dmg / 1e11) * 1e11) : s;
 }
@@ -84,16 +87,8 @@ function render() {
 
   const entries = monthEntries();
   const map = cellMap(entries);
-  const dim = daysInMonth(y, m);
-  const days = [];
-  for (let d = 1; d <= dim; d++) {
-    const ds = `${y}-${pad(m + 1)}-${pad(d)}`;
-    // показываем только дни, где есть данные, либо до/включая сегодня (для текущего месяца)
-    if (entries.some((e) => e.date === ds) || (state.month.m === new Date().getMonth() && state.month.y === new Date().getFullYear() && ds <= t)) days.push(ds);
-  }
-  if (!days.length) days.push(t); // пустой месяц — рисуем хотя бы один столбец
 
-  // строки: ники, отсортированные по сумме за месяц
+  // игроки месяца, отсортированные по сумме
   const byNick = new Map();
   for (const e of map.values()) {
     const cur = byNick.get(e.nick) || { total: 0, days: 0 };
@@ -102,43 +97,6 @@ function render() {
   }
   const nicks = [...byNick.keys()].sort((a, b) => byNick.get(b).total - byNick.get(a).total);
 
-  // максимум для heat-шкалы
-  let maxV = 0;
-  for (const e of map.values()) maxV = Math.max(maxV, e.dmg);
-
-  // шапка
-  $('grid-head').innerHTML =
-    `<th class="nick-col">Игрок</th>` +
-    days.map((ds) => {
-      const isToday = ds === t;
-      return `<th class="${isToday ? 'today-col' : ''}" title="${ds}">${Number(ds.slice(8))}</th>`;
-    }).join('') +
-    `<th>Σ</th>`;
-
-  // тело
-  const bodyRows = nicks.length ? nicks.map((nick) => {
-    const cells = days.map((ds) => {
-      const e = map.get(`${nick}|${ds}`);
-      if (!e) return `<td class="cell" data-nick="${esc(nick)}" data-date="${ds}"></td>`;
-      const cls = ['cell', 'has', e.demo ? 'demo-cell' : ''].filter(Boolean).join(' ');
-      return `<td class="${cls}" data-nick="${esc(nick)}" data-date="${ds}" style="background:${heatColor(e.dmg, maxV)}" title="${nick} · ${ds}">${fmtShort(e.dmg)}</td>`;
-    }).join('');
-    return `<tr><td class="nick" title="${esc(nick)}">${esc(nick)}</td>${cells}<td class="sum">${fmtDmg(byNick.get(nick).total)}</td></tr>`;
-  }).join('') :
-    `<tr><td class="nick">—</td><td class="cell" colspan="${days.length + 1}" style="text-align:center;color:var(--muted)">Пока нет данных. Отправь урон боту @Archero2Unity_bot!</td></tr>`;
-  $('grid-body').innerHTML = bodyRows;
-
-  // низ: суммы по дням
-  const dayTotals = days.map((ds) => {
-    let s = 0, any = false;
-    for (const [k, e] of map) if (k.endsWith('|' + ds)) { s += e.dmg; any = true; }
-    return any ? fmtShort(s) : '';
-  });
-  $('grid-foot').innerHTML =
-    `<td class="nick">Σ за день</td>` +
-    dayTotals.map((v, i) => `<td>${v}</td>`).join('') +
-    `<td></td>`;
-
   // карточки
   $('stat-players').textContent = nicks.length;
   const todaySum = [...map.values()].filter((e) => e.date === t).reduce((s, e) => s + e.dmg, 0);
@@ -146,8 +104,75 @@ function render() {
   const monthSum = [...map.values()].reduce((s, e) => s + e.dmg, 0);
   $('stat-month').textContent = monthSum ? fmtDmg(monthSum) : '—';
 
+  renderCalendars(nicks, byNick, map, t);
+  renderTodayPanel(map, t);
   renderLeaderboard(nicks, byNick, map);
   renderDemoBanner(entries);
+}
+
+/* классическая сетка месяца (Пн–Вс) для одного игрока */
+function playerCalendar(nick, map, playerMax, t) {
+  const { y, m } = state.month;
+  const shift = (new Date(y, m, 1).getDay() + 6) % 7; // Пн = 0
+  const dim = daysInMonth(y, m);
+  const prefix = `${y}-${pad(m + 1)}-`;
+  const cells = [];
+  for (let i = 0; i < shift; i++) cells.push('<span class="cal-cell off"></span>');
+  for (let d = 1; d <= dim; d++) {
+    const ds = prefix + pad(d);
+    const e = map.get(`${nick}|${ds}`);
+    let cls = 'cal-cell';
+    let style = '';
+    let val = '';
+    if (ds > t) cls += ' future';
+    if (ds === t) cls += ' today';
+    if (e) {
+      cls += ' has' + (e.demo ? ' demo-cell' : '');
+      style = ` style="background:${heatColor(e.dmg, playerMax)}"`;
+      val = `<span class="cal-val">${fmtShort(e.dmg)}</span>`;
+    }
+    cells.push(`<span class="${cls}"${style} data-nick="${esc(nick)}" data-date="${ds}" title="${nick} · ${ds}"><span class="cal-num">${d}</span>${val}</span>`);
+  }
+  return cells.join('');
+}
+
+function renderCalendars(nicks, byNick, map, t) {
+  const weekdays = `<div class="cal-weekdays">${WEEKDAYS.map((w, i) => `<span class="${i > 4 ? 'wend' : ''}">${w}</span>`).join('')}</div>`;
+  const html = nicks.length ? nicks.map((nick) => {
+    const st = byNick.get(nick);
+    let maxV = 0;
+    for (const [k, e] of map) if (k.startsWith(nick + '|')) maxV = Math.max(maxV, e.dmg);
+    return `<div class="cal-block">
+      <div class="cal-head">
+        <span class="cal-nick">${esc(nick)}</span>
+        <span class="cal-meta">Σ ${fmtDmg(st.total)} · ${st.days} дн.</span>
+      </div>
+      ${weekdays}
+      <div class="cal-grid">${playerCalendar(nick, map, maxV, t)}</div>
+    </div>`;
+  }).join('') :
+    `<div class="cal-empty">Пока нет данных за этот месяц.<br>Отправь скриншот и урон боту <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a> — через пару минут ты появишься здесь.</div>`;
+  $('calendars').innerHTML = html;
+}
+
+/* панель «Сегодня»: текущий день и урон по нему из присланных данных */
+function renderTodayPanel(map, t) {
+  const now = new Date();
+  const title = `Сегодня · ${now.getDate()} ${MONTH_GEN[now.getMonth()]}`;
+  const rows = [...map.values()].filter((e) => e.date === t).sort((a, b) => b.dmg - a.dmg);
+  const total = rows.reduce((s, e) => s + e.dmg, 0);
+  const list = rows.length
+    ? rows.map((e, i) => `
+      <li>
+        <span class="rank">${i + 1}</span>
+        <span class="name">${esc(e.nick)}${e.demo ? ' <i class="demo-note">(демо)</i>' : ''}</span>
+        <span class="total">${fmtDmg(e.dmg)}</span>
+        <span class="bar"><i style="width:${rows.length ? Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100)) : 0}%"></i></span>
+      </li>`).join('')
+    : `<li class="today-none">Сегодня урона ещё не присылали 🏹</li>`;
+  $('today-title').textContent = title;
+  $('today-list').innerHTML = list;
+  $('today-total').textContent = rows.length ? `Σ ${fmtDmg(total)} от ${rows.length} участник${rows.length === 1 ? 'а' : 'ов'}` : '';
 }
 
 function renderLeaderboard(nicks, byNick, map) {
@@ -169,14 +194,12 @@ function renderLeaderboard(nicks, byNick, map) {
 
 function renderDemoBanner(entries) {
   const hasDemo = entries.some((e) => e.demo);
-  const hasReal = entries.some((e) => !e.demo);
   const banner = $('demo-banner');
-  banner.hidden = !(hasDemo || (state.hideDemo && hasDemo));
+  banner.hidden = !hasDemo;
   banner.querySelector('span').textContent = state.hideDemo
     ? 'Демо-данные скрыты'
     : 'Показаны демо-данные для примера — скрой, когда пойдут реальные';
   $('toggle-demo').textContent = state.hideDemo ? 'Показать демо' : 'Скрыть демо';
-  if (!hasDemo) banner.hidden = true;
 }
 
 /* ---------- события ---------- */
@@ -190,10 +213,10 @@ $('toggle-demo').onclick = () => {
 };
 
 /* клик по ячейке → попап с пруфом */
-$('grid-body').addEventListener('click', (ev) => {
-  const td = ev.target.closest('td.cell.has');
-  if (!td) return;
-  const nick = td.dataset.nick, date = td.dataset.date;
+$('calendars').addEventListener('click', (ev) => {
+  const cell = ev.target.closest('span.cal-cell.has');
+  if (!cell) return;
+  const nick = cell.dataset.nick, date = cell.dataset.date;
   const e = [...state.raw.entries]
     .filter((x) => x.nick === nick && x.date === date && (!state.hideDemo || !x.demo))
     .sort((a, b) => b.dmg - a.dmg)[0];

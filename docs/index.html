@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unity — Календарь урона · Archero 2</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <header>
@@ -35,14 +35,14 @@
 
   <section class="panel">
     <h2>Календарь урона</h2>
-    <div class="table-wrap">
-      <table id="grid">
-        <thead><tr id="grid-head"></tr></thead>
-        <tbody id="grid-body"></tbody>
-        <tfoot><tr id="grid-foot"></tr></tfoot>
-      </table>
-    </div>
-    <p class="hint">Ячейка — урон за день (отправь в бот, например <b>5.91T</b>). Клик по ячейке — детали и пруф. Повторная отправка за тот же день перезаписывает значение.</p>
+    <div id="calendars"></div>
+    <p class="hint">Ячейка — урон за день. Цвет — от зелёного (мало) к красному (рекорд месяца игрока). Клик по ячейке с числом — доказательство (скриншот). Повторная отправка за тот же день перезаписывает значение.</p>
+  </section>
+
+  <section class="panel today-panel">
+    <h2 id="today-title">Сегодня</h2>
+    <ol id="today-list" class="leaderboard today-list"></ol>
+    <div id="today-total" class="today-total"></div>
   </section>
 
   <section class="panel">
@@ -55,7 +55,7 @@
     <ol class="howto">
       <li>Открой бота <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
       <li>Отправь <b>/start</b> и напиши свой игровой ник</li>
-      <li>Отправь видео рейтинга (пруф) и следом — урон: <b>5.91T</b></li>
+      <li>Отправь <b>скриншот</b> рейтинга (доказательство) и следом — урон: <b>5.91T</b></li>
     </ol>
     <p class="hint">Данные обновляются автоматически раз в несколько минут.</p>
   </section>
@@ -66,11 +66,11 @@
     <button class="modal-close" id="popup-close">✕</button>
     <h3 id="popup-title">—</h3>
     <div id="popup-damage" class="popup-damage">—</div>
-    <img id="popup-proof" alt="Пруф" hidden>
-    <div id="popup-noproof" class="hint">Пруф не приложен</div>
+    <img id="popup-proof" alt="Доказательство" hidden>
+    <div id="popup-noproof" class="hint">Скриншот не приложен</div>
   </div>
 </div>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
