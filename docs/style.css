@@ -36,21 +36,6 @@ header {
 .sub { color: var(--muted); font-size: 14px; }
 .updated { margin-left: auto; color: var(--muted); font-size: 12.5px; }
 
-#demo-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  background: rgba(245, 185, 66, .1);
-  border: 1px solid rgba(245, 185, 66, .35);
-  color: var(--accent);
-  border-radius: 12px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-  font-size: 14px;
-}
-#demo-banner button { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
 
 .month-nav {
   display: flex;
@@ -157,7 +142,6 @@ header {
 }
 .cal-cell .cal-sub { font-size: 10.5px; color: var(--muted); line-height: 1; margin-top: 2px; }
 .cal-cell:hover { filter: brightness(1.25); }
-.cal-cell.demo-cell .cal-val { font-style: italic; opacity: .75; }
 
 /* ---------- панель дня ---------- */
 .today-panel h2 { display: flex; justify-content: space-between; align-items: baseline; }
@@ -169,7 +153,6 @@ header {
   font-variant-numeric: tabular-nums;
 }
 .today-none { color: var(--muted); padding: 6px 2px; }
-.demo-note { color: var(--muted); font-size: 12px; }
 .proof-btn {
   grid-column: 4;
   justify-self: start;

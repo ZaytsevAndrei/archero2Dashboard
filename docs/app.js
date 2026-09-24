@@ -14,7 +14,6 @@ const state = {
   raw: { entries: [], users: {}, updatedAt: null },
   month: null,            // {y, m} — просматриваемый месяц
   selectedDate: null,     // выбранная дата 'YYYY-MM-DD' (по умолчанию сегодня)
-  hideDemo: localStorage.getItem('hideDemo') === '1',
 };
 
 /* ---------- утилиты ---------- */
@@ -60,11 +59,11 @@ async function loadData() {
   render();
 }
 
-/* одна запись на ник+день (максимальная), с учётом фильтра демо */
+/* одна запись на ник+день (максимальная); демо-записи не показываем */
 function cellMap() {
   const map = new Map(); // key nick|date -> entry
   for (const e of state.raw.entries) {
-    if (!e.date || (state.hideDemo && e.demo)) continue;
+    if (!e.date || e.demo) continue;
     const k = `${e.nick}|${e.date}`;
     const prev = map.get(k);
     if (!prev || e.dmg > prev.dmg) map.set(k, e);
@@ -75,11 +74,11 @@ function cellMap() {
 function dayTotals(map) {
   const { y, m } = state.month;
   const prefix = `${y}-${pad(m + 1)}-`;
-  const days = new Map(); // date -> {sum, count, demoOnly}
+  const days = new Map(); // date -> {sum, count}
   for (const [k, e] of map) {
     if (!e.date.startsWith(prefix)) continue;
-    const cur = days.get(e.date) || { sum: 0, count: 0, demoOnly: true };
-    cur.sum += e.dmg; cur.count++; if (!e.demo) cur.demoOnly = false;
+    const cur = days.get(e.date) || { sum: 0, count: 0 };
+    cur.sum += e.dmg; cur.count++;
     days.set(e.date, cur);
   }
   return days;
@@ -121,7 +120,6 @@ function render() {
   renderCalendar(days, t);
   renderDayPanel(map);
   renderLeaderboard(nicks, byNick, map);
-  renderDemoBanner();
 }
 
 /* один общий календарь месяца: ячейка = день, значение = сумма урона за день */
@@ -144,7 +142,7 @@ function renderCalendar(days, t) {
     if (ds === t) cls += ' today';
     if (ds === state.selectedDate) cls += ' selected';
     if (day) {
-      cls += ' has' + (day.demoOnly ? ' demo-cell' : '');
+      cls += ' has';
       style = ` style="background:${heatColor(day.sum, maxDay)}"`;
       val = `<span class="cal-val">${fmtShort(day.sum)}</span><span class="cal-sub">${day.count} 🏹</span>`;
     }
@@ -171,7 +169,7 @@ function renderDayPanel(map) {
     ? rows.map((e, i) => `
       <li>
         <span class="rank">${i + 1}</span>
-        <span class="name">${esc(e.nick)}${e.demo ? ' <i class="demo-note">(демо)</i>' : ''}</span>
+        <span class="name">${esc(e.nick)}</span>
         ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="Открыть скриншот">🧾</button>` : ''}
         <span class="total">${fmtDmg(e.dmg)}</span>
         <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%"></i></span>
@@ -200,25 +198,11 @@ function renderLeaderboard(nicks, byNick, map) {
   }).join('') || '<li class="meta" style="grid-template-columns:1fr">Пока нет данных.</li>';
 }
 
-function renderDemoBanner() {
-  const hasDemo = state.raw.entries.some((e) => e.demo);
-  const banner = $('demo-banner');
-  banner.hidden = !hasDemo;
-  banner.querySelector('span').textContent = state.hideDemo
-    ? 'Демо-данные скрыты'
-    : 'Показаны демо-данные для примера — скрой, когда пойдут реальные';
-  $('toggle-demo').textContent = state.hideDemo ? 'Показать демо' : 'Скрыть демо';
-}
 
 /* ---------- события ---------- */
 $('prev-month').onclick = () => { const { y, m } = state.month; state.month = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; render(); };
 $('next-month').onclick = () => { const { y, m } = state.month; state.month = m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; render(); };
 $('today-btn').onclick = () => { const d = new Date(); state.month = { y: d.getFullYear(), m: d.getMonth() }; state.selectedDate = todayStr(); render(); };
-$('toggle-demo').onclick = () => {
-  state.hideDemo = !state.hideDemo;
-  localStorage.setItem('hideDemo', state.hideDemo ? '1' : '0');
-  render();
-};
 
 /* клик по дате → детали дня под календарём */
 $('calendar').addEventListener('click', (ev) => {
@@ -235,11 +219,11 @@ $('day-list').addEventListener('click', (ev) => {
   const btn = ev.target.closest('button.proof-btn');
   if (!btn) return;
   const e = [...state.raw.entries]
-    .filter((x) => x.nick === btn.dataset.nick && x.date === btn.dataset.date && (!state.hideDemo || !x.demo))
+    .filter((x) => x.nick === btn.dataset.nick && x.date === btn.dataset.date && !x.demo)
     .sort((a, b) => b.dmg - a.dmg)[0];
   if (!e) return;
   $('popup-title').textContent = `${e.nick} · ${e.date.split('-').reverse().join('.')}`;
-  $('popup-damage').textContent = fmtDmg(e.dmg) + (e.demo ? ' (демо)' : '');
+  $('popup-damage').textContent = fmtDmg(e.dmg);
   const img = $('popup-proof');
   if (e.proof) { img.src = e.proof; img.hidden = false; $('popup-noproof').hidden = true; }
   else { img.hidden = true; img.removeAttribute('src'); $('popup-noproof').hidden = false; }
