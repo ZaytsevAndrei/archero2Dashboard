@@ -57,3 +57,14 @@ jobs:
             -f "source[branch]=main" -f "source[path]=/docs" \
             && echo "Pages включён" \
             || echo "Pages уже включён или включится вручную (Settings → Pages)"
+
+      # Страховка от «залипшего» деплоя: явно запрашиваем пересборку Pages.
+      # При branch-режиме каждый пуш и так пересобирает сайт, но если сборка
+      # упала (например, из-за Jekyll), без этого шага прод застревает на старом.
+      - name: Kick Pages build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Конфигурация Pages:"
+          gh api repos/{owner}/{repo}/pages --jq '.html_url + " | ветка: " + (.source.branch // "GitHub Actions режим")' || echo "Pages не настроен"
+          gh api --method POST repos/{owner}/{repo}/pages/builds && echo "Пересборка Pages запрошена" || echo "Пересборку запросить не удалось (см. выше)"
