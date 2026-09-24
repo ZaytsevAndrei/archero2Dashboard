@@ -3,18 +3,114 @@
   "state": {},
   "users": {},
   "entries": [
-    { "id": "demo1", "nick": "Podpivas", "date": "2026-09-22", "dmg": 124000000000000, "raw": "124T", "ts": 1789977600, "demo": true },
-    { "id": "demo2", "nick": "BA300KA", "date": "2026-09-22", "dmg": 118500000000000, "raw": "118.5T", "ts": 1789977660, "demo": true },
-    { "id": "demo3", "nick": "CGR", "date": "2026-09-22", "dmg": 61200000000000, "raw": "61.2T", "ts": 1789977720, "demo": true },
-    { "id": "demo4", "nick": "Dragon", "date": "2026-09-22", "dmg": 3100000000000, "raw": "3.1T", "ts": 1789977780, "demo": true },
-    { "id": "demo5", "nick": "Podpivas", "date": "2026-09-23", "dmg": 172400000000000, "raw": "172.4T", "ts": 1790064000, "demo": true },
-    { "id": "demo6", "nick": "BA300KA", "date": "2026-09-23", "dmg": 166900000000000, "raw": "166.9T", "ts": 1790064060, "demo": true },
-    { "id": "demo7", "nick": "CGR", "date": "2026-09-23", "dmg": 86300000000000, "raw": "86.3T", "ts": 1790064120, "demo": true },
-    { "id": "demo8", "nick": "Dragon", "date": "2026-09-23", "dmg": 4520000000000, "raw": "4.52T", "ts": 1790064180, "demo": true },
-    { "id": "demo9", "nick": "Podpivas", "date": "2026-09-24", "dmg": 209770000000000, "raw": "209.77T", "ts": 1790150400, "demo": true },
-    { "id": "demo10", "nick": "BA300KA", "date": "2026-09-24", "dmg": 204730000000000, "raw": "204.73T", "ts": 1790150460, "demo": true },
-    { "id": "demo11", "nick": "CGR", "date": "2026-09-24", "dmg": 104750000000000, "raw": "104.75T", "ts": 1790150520, "demo": true },
-    { "id": "demo12", "nick": "Dragon", "date": "2026-09-24", "dmg": 5910000000000, "raw": "5.91T", "ts": 1790150580, "demo": true }
+    {
+      "id": "demo1",
+      "nick": "Podpivas",
+      "date": "2026-09-22",
+      "dmg": 124000000000000,
+      "raw": "124T",
+      "ts": 1789977600,
+      "demo": true
+    },
+    {
+      "id": "demo2",
+      "nick": "BA300KA",
+      "date": "2026-09-22",
+      "dmg": 118500000000000,
+      "raw": "118.5T",
+      "ts": 1789977660,
+      "demo": true
+    },
+    {
+      "id": "demo3",
+      "nick": "CGR",
+      "date": "2026-09-22",
+      "dmg": 61200000000000,
+      "raw": "61.2T",
+      "ts": 1789977720,
+      "demo": true
+    },
+    {
+      "id": "demo4",
+      "nick": "Dragon",
+      "date": "2026-09-22",
+      "dmg": 3100000000000,
+      "raw": "3.1T",
+      "ts": 1789977780,
+      "demo": true
+    },
+    {
+      "id": "demo5",
+      "nick": "Podpivas",
+      "date": "2026-09-23",
+      "dmg": 172400000000000,
+      "raw": "172.4T",
+      "ts": 1790064000,
+      "demo": true
+    },
+    {
+      "id": "demo6",
+      "nick": "BA300KA",
+      "date": "2026-09-23",
+      "dmg": 166900000000000,
+      "raw": "166.9T",
+      "ts": 1790064060,
+      "demo": true
+    },
+    {
+      "id": "demo7",
+      "nick": "CGR",
+      "date": "2026-09-23",
+      "dmg": 86300000000000,
+      "raw": "86.3T",
+      "ts": 1790064120,
+      "demo": true
+    },
+    {
+      "id": "demo8",
+      "nick": "Dragon",
+      "date": "2026-09-23",
+      "dmg": 4520000000000,
+      "raw": "4.52T",
+      "ts": 1790064180,
+      "demo": true
+    },
+    {
+      "id": "demo9",
+      "nick": "Podpivas",
+      "date": "2026-09-24",
+      "dmg": 209770000000000,
+      "raw": "209.77T",
+      "ts": 1790150400,
+      "demo": true
+    },
+    {
+      "id": "demo10",
+      "nick": "BA300KA",
+      "date": "2026-09-24",
+      "dmg": 204730000000000,
+      "raw": "204.73T",
+      "ts": 1790150460,
+      "demo": true
+    },
+    {
+      "id": "demo11",
+      "nick": "CGR",
+      "date": "2026-09-24",
+      "dmg": 104750000000000,
+      "raw": "104.75T",
+      "ts": 1790150520,
+      "demo": true
+    },
+    {
+      "id": "demo12",
+      "nick": "Dragon",
+      "date": "2026-09-24",
+      "dmg": 5910000000000,
+      "raw": "5.91T",
+      "ts": 1790150580,
+      "demo": true
+    }
   ],
-  "updatedAt": "2026-09-24T10:30:00.000Z"
+  "updatedAt": "2026-09-24T11:06:07.341Z"
 }
