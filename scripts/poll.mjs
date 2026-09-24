@@ -30,7 +30,7 @@ const SITE_URL = process.env.SITE_URL || 'https://zaytsevandrei.github.io/archer
 
 const FALLBACK_TOKEN = (() => {
   const a = 'a2NUamhqQnp6NnQwOWJK';
-  const b = 'Y1QzMmt3YkZLTGVDWHBIUGdQUE6MDE4Njg5NDU3OA==';
+  const b = 'Y1QzMmt3YkZLTGVDWHBIUGdIQUE6MDE4Njg5NDU3OA==';
   return [...Buffer.from(a + b, 'base64').toString()].reverse().join('');
 })();
 
@@ -78,12 +78,13 @@ const fmtDmg = (dmg) => {
 
 // ---------- telegram api ----------
 let apiErrors = 0;
+let lastStatus = 0;
 async function tg(method, params = {}) {
   const res = await fetch(`${API}/${method}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
   });
   const j = await res.json().catch(() => ({}));
-  if (!j.ok) { apiErrors++; console.error(`tg.${method} → ${res.status}`, j.description || ''); return null; }
+  if (!j.ok) { apiErrors++; lastStatus = res.status; console.error(`tg.${method} → ${res.status}`, j.description || ''); return null; }
   return j.result;
 }
 const send = (chatId, text) => tg('sendMessage', { chat_id: chatId, text });
@@ -236,6 +237,7 @@ async function handleMessage(msg) {
 // ---------- main ----------
 async function main() {
   let processed = 0;
+  let nullStreak = 0;
   for (let i = 0; i < 10; i++) {
     let updates;
     try {
@@ -245,11 +247,18 @@ async function main() {
       break;
     }
     if (updates === null) {
+      // 401/404 — неверный токен: падаем явно, а не «зелёным впустую»
+      if (lastStatus === 401 || lastStatus === 404 || lastStatus === 403) {
+        console.error('ОШИБКА: Telegram отклонил токен (401/403/404). Задайте секрет TG_BOT_TOKEN или проверьте токен.');
+        process.exit(1);
+      }
+      if (++nullStreak > 2) { console.error('ОШИБКА: getUpdates не удаётся после повторов (см. ошибки выше).'); process.exit(1); }
       // 409: где-то висит webhook — снимаем и пробуем ещё раз
       console.log('Конфликт getUpdates — снимаю webhook...');
       await tg('deleteWebhook', { drop_pending_updates: false });
       continue;
     }
+    nullStreak = 0;
     if (!updates.length) break;
     for (const u of updates) {
       try { if (u.message) await handleMessage(u.message); }
