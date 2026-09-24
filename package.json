@@ -1,0 +1,10 @@
+{
+  "name": "archero2-dashboard",
+  "private": true,
+  "type": "module",
+  "description": "Календарь урона гильдии Unity (Archero 2): сайт + Telegram-бот",
+  "dependencies": {
+    "jimp": "^1.6.1",
+    "tesseract.js": "^7.0.0"
+  }
+}

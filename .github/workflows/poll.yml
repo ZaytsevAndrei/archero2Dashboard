@@ -26,6 +26,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install deps (OCR: tesseract/jimp)
+        run: npm install --no-audit --no-fund
+
       - name: Poll Telegram
         env:
           TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}

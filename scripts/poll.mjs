@@ -7,7 +7,8 @@
  * Логика бота:
  *   /start        → приветствие + запрос игрового ника
  *   ник текстом   → регистрация
- *   фото-скрин   → «теперь пришли урон»
+ *   фото-скрин   → OCR: бот ищет строку с ником игрока и предлагает подтвердить урон
+ *                  (кнопки «Записать» / «Ввести вручную»; не распознал — просит урон текстом)
  *   «5.91T»       → запись урона за сегодня (повторная отправка за тот же день перезаписывает)
  *   /nick Имя     → сменить ник
  *   /undo         → удалить свою последнюю запись
@@ -17,9 +18,13 @@
  *   TG_TOKEN  — токен бота (секрет TG_BOT_TOKEN). Если пуст — используется встроенный
  *               запутанный fallback (только для MVP; задайте секрет и перегенерируйте токен).
  *   SITE_URL  — ссылка на сайт, упомянутая в /help (по умолчанию GitHub Pages этого репо).
+ *
+ * Зависимости для OCR (jimp, tesseract.js) опциональны — ставятся через npm install
+ * в workflow; без них бот просто просит урон текстом.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { ocrOwnRow } from './ocr.mjs';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const DATA_FILE = path.join(ROOT, 'docs', 'data.json');
@@ -133,8 +138,8 @@ function handleCommand(msg) {
       '/stats — мои записи за 7 дней',
       '',
       'Как отметиться:',
-      '1) отправь скриншот рейтинга (фото — доказательство)',
-      '2) отправь урон, например: 5.91T или 209.77T',
+      '1) отправь скриншот рейтинга — я сам распознаю твой урон и попрошу подтвердить',
+      '2) если не распознал — пришли урон текстом: 5.91T или 209.77T',
       '',
       `Сайт: ${SITE_URL}`,
     ].join('\n'));
@@ -168,6 +173,56 @@ function handleCommand(msg) {
   send(msg.chat.id, 'Не знаю такую команду. /help — список команд');
 }
 
+/* записать урон за дату (повторная отправка за тот же день перезаписывает) */
+function recordEntry(uid, id, date, dmg, raw, ts, proof) {
+  const nick = data.users[uid]?.nick;
+  if (!nick) return false;
+  data.entries = data.entries.filter((e) => !(e.tgId === uid && e.date === date && !e.demo));
+  data.entries.push({ id: String(id), tgId: uid, nick, date, dmg, raw, ts, ...(proof ? { proof } : {}) });
+  return true;
+}
+
+/* скачать скрин, распознать строку ника и предложить подтверждение */
+async function processPhoto(uid, chatId, fileId, msgId) {
+  const proof = await downloadProof(fileId, msgId);
+  let ocr = null;
+  if (proof) {
+    try { ocr = await ocrOwnRow(path.join(ROOT, 'docs', proof), data.users[uid]?.nick); } catch (e) { console.error('ocr:', e.message); }
+  }
+  if (ocr) {
+    data.state[uid] = { await: 'confirm', fileId, proof, dmg: ocr.dmg, raw: ocr.raw, msgId };
+    tg('sendMessage', {
+      chat_id: chatId,
+      text: `Скрин распознал 🔎\n${data.users[uid].nick} — ${fmtDmg(ocr.dmg)}\nЗаписать за сегодня?`,
+      reply_markup: { inline_keyboard: [
+        [{ text: '✅ Записать', callback_data: 'ocr_yes' }, { text: '✏️ Ввести вручную', callback_data: 'ocr_no' }],
+      ] },
+    });
+  } else {
+    data.state[uid] = { await: 'damage', fileId, msgId, ...(proof ? { proof } : {}) };
+    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nНапиши урон текстом, например: 5.91T');
+  }
+}
+
+async function handleCallback(q) {
+  if (!q.from || q.from.is_bot) return;
+  const uid = String(q.from.id);
+  const st = data.state[uid] || {};
+  await tg('answerCallbackQuery', { callback_query_id: q.id });
+  if (st.await !== 'confirm') return;
+  if (q.data === 'ocr_yes') {
+    const date = localDate(q.message?.date || Math.floor(Date.now() / 1000));
+    const ok = recordEntry(uid, st.msgId || q.id, date, st.dmg, st.raw, q.message?.date || Math.floor(Date.now() / 1000), st.proof);
+    delete data.state[uid];
+    send(q.from.id, ok
+      ? `✅ Записал: ${fmtDmg(st.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`
+      : 'Что-то сломалось, попробуй прислать урон текстом: 5.91T');
+  } else if (q.data === 'ocr_no') {
+    data.state[uid] = { await: 'damage', fileId: st.fileId, msgId: st.msgId, ...(st.proof ? { proof: st.proof } : {}) };
+    send(q.from.id, 'Ок, напиши урон текстом, например: 5.91T');
+  }
+}
+
 async function handleMessage(msg) {
   if (!msg.from || msg.from.is_bot) return;
   if (msg.chat.type !== 'private') return; // MVP: только личные чаты
@@ -179,16 +234,15 @@ async function handleMessage(msg) {
 
   if (msg.text && msg.text.startsWith('/')) { handleCommand(msg); return; }
 
-  // медиа → ждём урон (доказательство — скриншот/фото)
+  // медиа → доказательство = скриншот/фото; видео отклоняем
   if (msg.video || msg.animation) {
     send(msg.chat.id, 'Видео не принимаем 🙈 Пришли, пожалуйста, скриншот рейтинга картинкой — и следом урон, например: 5.91T');
     return;
   }
   const fileId = msg.photo?.at(-1)?.file_id;
   if (fileId) {
-    if (!data.users[uid]) { data.state[uid] = { await: 'nick' }; send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):'); return; }
-    data.state[uid] = { await: 'damage', fileId };
-    send(msg.chat.id, 'Скрин получил! Теперь напиши свой урон, например: 5.91T');
+    if (!data.users[uid]) { data.state[uid] = { await: 'nick', fileId }; send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):'); return; }
+    await processPhoto(uid, msg.chat.id, fileId, msg.message_id);
     return;
   }
 
@@ -199,32 +253,29 @@ async function handleMessage(msg) {
   if (st.await === 'nick') {
     if (text.length > 24 || /[\n]/.test(text) || parseDamage(text)) { send(msg.chat.id, 'Это похоже не на ник. Напиши игровой ник (до 24 символов):'); return; }
     data.users[uid] = { nick: text, joined: new Date().toISOString(), ...meta };
-    delete data.state[uid];
-    send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь отправь скриншот рейтинга (фото), а следом — урон, например: 5.91T\nВсё автоматически попадёт на сайт.`);
+    if (st.fileId) {
+      // скрин уже прислан — распознаём сразу после регистрации
+      await processPhoto(uid, msg.chat.id, st.fileId, msg.message_id);
+    } else {
+      delete data.state[uid];
+      send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь просто отправь скриншот рейтинга — я сам распознаю урон и попрошу подтвердить.\nНе распознаю — попросу ввести текстом.`);
+    }
     return;
   }
 
-  // урон
+  // урон текстом (в т.ч. вместо кнопок подтверждения)
   const parsed = parseDamage(text);
   if (parsed) {
     if (!data.users[uid]) { data.state[uid] = { await: 'nick' }; send(msg.chat.id, 'Напиши сначала свой игровой ник:'); return; }
     const date = localDate(msg.date);
-    let proof = null;
-    if (st.fileId) proof = await downloadProof(st.fileId, msg.message_id);
-    const entry = {
-      id: String(msg.message_id), tgId: uid, nick: data.users[uid].nick, date,
-      dmg: parsed.dmg, raw: parsed.raw, ts: msg.date,
-      ...(proof ? { proof } : {}),
-    };
-    // повторная отправка за тот же день перезаписывает
-    data.entries = data.entries.filter((e) => !(e.tgId === uid && e.date === date && !e.demo));
-    data.entries.push(entry);
+    const proof = st.proof || (st.fileId ? await downloadProof(st.fileId, msg.message_id) : null);
+    recordEntry(uid, msg.message_id, date, parsed.dmg, parsed.raw, msg.date, proof);
     delete data.state[uid];
     send(msg.chat.id, `✅ Записал: ${fmtDmg(parsed.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`);
     return;
   }
 
-  send(msg.chat.id, 'Не понял 🤔 Пришли урон, например: 5.91T\n/help — все команды');
+  send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга или урон текстом: 5.91T\n/help — все команды');
 }
 
 // ---------- main ----------
@@ -234,7 +285,7 @@ async function main() {
   for (let i = 0; i < 10; i++) {
     let updates;
     try {
-      updates = await tg('getUpdates', { offset: data.offset, timeout: 0, allowed_updates: ['message'] });
+      updates = await tg('getUpdates', { offset: data.offset, timeout: 0, allowed_updates: ['message', 'callback_query'] });
     } catch (e) {
       console.error('getUpdates failed:', e.message);
       break;
@@ -254,7 +305,10 @@ async function main() {
     nullStreak = 0;
     if (!updates.length) break;
     for (const u of updates) {
-      try { if (u.message) await handleMessage(u.message); }
+      try {
+        if (u.message) await handleMessage(u.message);
+        else if (u.callback_query) await handleCallback(u.callback_query);
+      }
       catch (e) { console.error('update error:', u.update_id, e.message); }
       data.offset = Math.max(data.offset, u.update_id + 1);
       processed++;
