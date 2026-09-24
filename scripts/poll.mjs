@@ -89,9 +89,16 @@ const fmtDmg = (dmg) => {
 let apiErrors = 0;
 let lastStatus = 0;
 async function tg(method, params = {}) {
-  const res = await fetch(`${API}/${method}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
-  });
+  let res;
+  try {
+    res = await fetch(`${API}/${method}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
+    });
+  } catch (e) {
+    // сетевой сбой не должен ронять процесс (необработанный reject глотал бы апдейты без ответа)
+    apiErrors++; lastStatus = 0; console.error(`tg.${method} → network:`, e.message);
+    return null;
+  }
   const j = await res.json().catch(() => ({}));
   if (!j.ok) { apiErrors++; lastStatus = res.status; console.error(`tg.${method} → ${res.status}`, j.description || ''); return null; }
   return j.result;

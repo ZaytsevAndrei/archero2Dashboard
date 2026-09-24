@@ -26,7 +26,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps (OCR: tesseract/jimp)
+      # ВАЖНО: имя шага в кавычках — внутри есть «OCR: tesseract/jimp»,
+      # и голое двоеточие в YAML-значении ломает весь файл воркфлоу
+      # (падение до создания джоб + расписание cron перестаёт срабатывать).
+      - name: "Install deps (OCR: tesseract/jimp)"
         run: npm install --no-audit --no-fund
 
       - name: Poll Telegram
