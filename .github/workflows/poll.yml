@@ -1,0 +1,53 @@
+name: Telegram poll & publish
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # каждые 5 минут (GitHub может задерживать)
+  workflow_dispatch: {}      # ручной запуск из вкладки Actions
+
+# не даём двум опросам работать одновременно (иначе getUpdates конфликтует)
+concurrency:
+  group: telegram-poll
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Poll Telegram
+        env:
+          TG_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+        run: node scripts/poll.mjs
+
+      - name: Commit new data
+        run: |
+          git config user.name  "damage-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data.json docs/proofs
+          if git diff --cached --quiet; then
+            echo "Нет новых данных — нечего коммитить."
+          else
+            git commit -m "data: update from telegram bot"
+            git push
+          fi
+
+      # Одноразовый шаг: включает GitHub Pages ( branch main / папка docs ),
+      # если ещё не включён. Ошибка 409 (уже включён) — это норма.
+      - name: Enable GitHub Pages (once)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method POST repos/{owner}/{repo}/pages \
+            -f "source[branch]=main" -f "source[path]=/docs" \
+            && echo "Pages включён" \
+            || echo "Pages уже включён или включится вручную (Settings → Pages)"

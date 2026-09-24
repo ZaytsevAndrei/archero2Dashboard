@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unity — Календарь урона · Archero 2</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<header>
+  <div class="brand">🏹 <b>UNITY</b> · Календарь урона</div>
+  <div class="sub">Вторжение монстров · Archero 2</div>
+  <div class="updated" id="updated">загрузка…</div>
+</header>
+
+<main>
+  <div id="demo-banner" hidden>
+    <span>Показаны демо-данные для примера</span>
+    <button id="toggle-demo">Скрыть демо</button>
+  </div>
+
+  <nav class="month-nav">
+    <button id="prev-month" title="Предыдущий месяц">‹</button>
+    <div id="month-label">—</div>
+    <button id="next-month" title="Следующий месяц">›</button>
+    <button id="today-btn" class="ghost">Сегодня</button>
+  </nav>
+
+  <div class="cards">
+    <div class="card"><span id="stat-players">–</span><label>участников</label></div>
+    <div class="card"><span id="stat-today">–</span><label>урона сегодня</label></div>
+    <div class="card"><span id="stat-month">–</span><label>сумма за месяц</label></div>
+  </div>
+
+  <section class="panel">
+    <h2>Календарь урона</h2>
+    <div class="table-wrap">
+      <table id="grid">
+        <thead><tr id="grid-head"></tr></thead>
+        <tbody id="grid-body"></tbody>
+        <tfoot><tr id="grid-foot"></tr></tfoot>
+      </table>
+    </div>
+    <p class="hint">Ячейка — урон за день (отправь в бот, например <b>5.91T</b>). Клик по ячейке — детали и пруф. Повторная отправка за тот же день перезаписывает значение.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Рейтинг за месяц</h2>
+    <ol id="leaderboard" class="leaderboard"></ol>
+  </section>
+
+  <section class="panel">
+    <h2>Как попасть в календарь</h2>
+    <ol class="howto">
+      <li>Открой бота <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
+      <li>Отправь <b>/start</b> и напиши свой игровой ник</li>
+      <li>Отправь видео рейтинга (пруф) и следом — урон: <b>5.91T</b></li>
+    </ol>
+    <p class="hint">Данные обновляются автоматически раз в несколько минут.</p>
+  </section>
+</main>
+
+<div id="cell-popup" class="modal" hidden>
+  <div class="modal-box">
+    <button class="modal-close" id="popup-close">✕</button>
+    <h3 id="popup-title">—</h3>
+    <div id="popup-damage" class="popup-damage">—</div>
+    <img id="popup-proof" alt="Пруф" hidden>
+    <div id="popup-noproof" class="hint">Пруф не приложен</div>
+  </div>
+</div>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
