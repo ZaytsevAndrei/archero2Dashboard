@@ -1,7 +1,7 @@
 {
-  "offset": 535524572,
+  "offset": 535524574,
   "state": {
-    "285967849": {
+    "362568347": {
       "await": "nick"
     },
     "2006381722": {
@@ -22,6 +22,12 @@
       "joined": "2026-09-24T13:51:22.877Z",
       "tgUsername": "katoteshikuza",
       "first": "Андрей"
+    },
+    "285967849": {
+      "nick": "blacky01",
+      "joined": "2026-09-25T10:36:49.020Z",
+      "tgUsername": "blacky001",
+      "first": "Nobody"
     },
     "319324257": {
       "nick": "Murinelli",
@@ -166,5 +172,5 @@
       "proof": "proofs/p_28.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:36:45.993Z"
+  "updatedAt": "2026-09-25T10:36:49.030Z"
 }
