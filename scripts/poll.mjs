@@ -78,7 +78,8 @@ function parseDamage(text) {
   const suf = (m[2] || 't').toLowerCase();
   const mult = { k: 1e3, 'к': 1e3, m: 1e6, 'м': 1e6, b: 1e9, 'б': 1e9, t: 1e12, 'т': 1e12, q: 1e15, qa: 1e15 }[suf];
   if (mult === undefined) return null;
-  return { dmg: Math.round(num * mult), raw: m[1].replace(',', '.') + m[2]?.toUpperCase().replace('Т', 'T') };
+  const sufRaw = (m[2] || 'T').toUpperCase().replace('Т', 'T'); // без суффикса считаем триллионами
+  return { dmg: Math.round(num * mult), raw: m[1].replace(',', '.') + sufRaw };
 }
 const fmtDmg = (dmg) => {
   const units = [[1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
@@ -89,17 +90,17 @@ const fmtDmg = (dmg) => {
 // ---------- telegram api ----------
 let apiErrors = 0;
 let lastStatus = 0;
-async function tg(method, params = {}, retries = 2) {
+async function tg(method, params = {}, retries = 3) {
   let res;
   try {
     res = await fetch(`${API}/${method}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
     });
   } catch (e) {
-    // сетевой сбой не должен ронять процесс; у некоторых хостеров первое TLS-соединение
-    // к Telegram виснет (~10 c) и проходит только со второй попытки — поэтому повторяем
+    // сетевой сбой не должен ронять процесс; у нашего хостера первое TLS-соединение
+    // к Telegram периодически виснет и проходит только повтором — ретраим с нарастающей паузой
     apiErrors++; lastStatus = 0; console.error(`tg.${method} → network:`, e.message);
-    if (retries > 0) { await new Promise((r) => setTimeout(r, 1500)); return tg(method, params, retries - 1); }
+    if (retries > 0) { await sleep(1200 * 2 ** (3 - retries)); return tg(method, params, retries - 1); }
     return null;
   }
   const j = await res.json().catch(() => ({}));
@@ -109,18 +110,23 @@ async function tg(method, params = {}, retries = 2) {
 const send = (chatId, text) => tg('sendMessage', { chat_id: chatId, text });
 
 async function downloadProof(fileId, updateId) {
-  try {
-    const f = await tg('getFile', { file_id: fileId });
-    if (!f || !f.file_path) return null;
-    if (f.file_size && f.file_size > 20 * 1024 * 1024) return null;
-    const url = `https://api.telegram.org/file/bot${TOKEN}/${f.file_path}`;
-    const buf = Buffer.from(await (await fetch(url)).arrayBuffer());
-    mkdirSync(PROOFS_DIR, { recursive: true });
-    const ext = path.extname(f.file_path) || '.jpg';
-    const fin = path.join(PROOFS_DIR, `p_${updateId}${ext}`);
-    writeFileSync(fin, buf);
-    return path.relative(path.join(ROOT, 'docs'), fin).replace(/\\/g, '/');
-  } catch (e) { console.error('proof download failed:', e.message); return null; }
+  for (let round = 1; round <= 2; round++) {
+    try {
+      const f = await tg('getFile', { file_id: fileId });
+      if (!f || !f.file_path) return null;
+      if (f.file_size && f.file_size > 20 * 1024 * 1024) return null;
+      const url = `https://api.telegram.org/file/bot${TOKEN}/${f.file_path}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`file HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      mkdirSync(PROOFS_DIR, { recursive: true });
+      const ext = path.extname(f.file_path) || '.jpg';
+      const fin = path.join(PROOFS_DIR, `p_${updateId}${ext}`);
+      writeFileSync(fin, buf);
+      return path.relative(path.join(ROOT, 'docs'), fin).replace(/\\/g, '/');
+    } catch (e) { console.error(`proof download (round ${round}) failed:`, e.message); }
+  }
+  return null;
 }
 
 // ---------- handlers ----------
@@ -234,15 +240,20 @@ async function handleCallback(q) {
 }
 
 async function handleMessage(msg) {
-  if (!msg.from || msg.from.is_bot) return;
-  if (msg.chat.type !== 'private') return; // MVP: только личные чаты
+  if (!msg.from || msg.from.is_bot) return; // посты самого канала без автора пропускаем
+  // Личные чаты — полный диалог (регистрация, подсказки); общий чат гильдии —
+  // скриншоты и урон числом, игроки с ником Telegram = игровой ник регистрируются сами
   const uid = String(msg.from.id);
+  const group = msg.chat.type !== 'private';
   const st = data.state[uid] || {};
 
   const meta = { tgUsername: msg.from.username || null, first: msg.from.first_name || null };
   if (data.users[uid]) Object.assign(data.users[uid], meta);
 
-  if (msg.text && msg.text.startsWith('/')) { handleCommand(msg); return; }
+  if (msg.text && msg.text.startsWith('/')) {
+    if (group) return; // команды и диалог регистрации — в личке, в общем чате не шумим
+    handleCommand(msg); return;
+  }
 
   // медиа → доказательство = скриншот/фото; видео отклоняем
   if (msg.video || msg.animation) {
@@ -251,7 +262,19 @@ async function handleMessage(msg) {
   }
   const fileId = msg.photo?.at(-1)?.file_id;
   if (fileId) {
-    if (!data.users[uid]) { data.state[uid] = { await: 'nick', fileId }; send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):'); return; }
+    if (!data.users[uid]) {
+      if (group && msg.from.username) {
+        data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), ...meta };
+        send(msg.chat.id, `@${msg.from.username}, записал тебя как «${msg.from.username}» (совпало с ником Telegram). Если игровой ник другой — /nick НовыйНик мне в личку.`);
+      } else if (group) {
+        send(msg.chat.id, 'Зарегистрируйся у меня в личке: @Archero2Unity_bot → /start (и сразу кидай скрины сюда)');
+        return;
+      } else {
+        data.state[uid] = { await: 'nick', fileId };
+        send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):');
+        return;
+      }
+    }
     await processPhoto(uid, msg.chat.id, fileId, msg.message_id);
     return;
   }
@@ -276,7 +299,14 @@ async function handleMessage(msg) {
   // урон текстом (в т.ч. вместо кнопок подтверждения)
   const parsed = parseDamage(text);
   if (parsed) {
-    if (!data.users[uid]) { data.state[uid] = { await: 'nick' }; send(msg.chat.id, 'Напиши сначала свой игровой ник:'); return; }
+    if (!data.users[uid]) {
+      if (group && msg.from.username) data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), ...meta };
+      else {
+        data.state[uid] = { await: 'nick' };
+        send(msg.chat.id, group ? 'Сначала зарегистрируйся в личке: @Archero2Unity_bot' : 'Напиши сначала свой игровой ник:');
+        return;
+      }
+    }
     const date = localDate(msg.date);
     const proof = st.proof || (st.fileId ? await downloadProof(st.fileId, msg.message_id) : null);
     recordEntry(uid, msg.message_id, date, parsed.dmg, parsed.raw, msg.date, proof);
@@ -285,7 +315,7 @@ async function handleMessage(msg) {
     return;
   }
 
-  send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга — урон я распознаю сам.\n/help — все команды');
+  if (!group) send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга — урон я распознаю сам.\n/help — все команды');
 }
 
 // ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
@@ -295,7 +325,7 @@ async function main() {
   for (let i = 0; i < 10; i++) {
     let updates;
     try {
-      updates = await tg('getUpdates', { offset: data.offset, timeout: 0, allowed_updates: ['message', 'callback_query'] });
+      updates = await tg('getUpdates', { offset: data.offset, timeout: 0, allowed_updates: ['message', 'callback_query', 'channel_post'] });
     } catch (e) {
       console.error('getUpdates failed:', e.message);
       break;
@@ -316,7 +346,7 @@ async function main() {
     if (!updates.length) break;
     for (const u of updates) {
       try {
-        if (u.message) await handleMessage(u.message);
+        if (u.message || u.channel_post) await handleMessage(u.message || u.channel_post);
         else if (u.callback_query) await handleCallback(u.callback_query);
       }
       catch (e) { console.error('update error:', u.update_id, e.message); }
@@ -357,7 +387,7 @@ async function loop() {
   for (;;) {
     let updates = null;
     try {
-      updates = await tg('getUpdates', { offset: data.offset, timeout: 50, allowed_updates: ['message', 'callback_query'] });
+      updates = await tg('getUpdates', { offset: data.offset, timeout: 50, allowed_updates: ['message', 'callback_query', 'channel_post'] });
     } catch (e) { console.error('[bot] getUpdates:', e.message); }
     if (updates === null) {
       if (lastStatus === 401 || lastStatus === 404 || lastStatus === 403) {
@@ -372,7 +402,7 @@ async function loop() {
     let n = 0;
     for (const u of updates) {
       try {
-        if (u.message) await handleMessage(u.message);
+        if (u.message || u.channel_post) await handleMessage(u.message || u.channel_post);
         else if (u.callback_query) await handleCallback(u.callback_query);
         n++;
       } catch (e) { console.error('[bot] update error:', u.update_id, e.message); }
