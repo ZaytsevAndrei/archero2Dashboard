@@ -1,5 +1,5 @@
 {
-  "offset": 535524580,
+  "offset": 535524581,
   "state": {
     "362568347": {
       "await": "nick"
@@ -163,16 +163,6 @@
       "proof": "proofs/p_15.jpg"
     },
     {
-      "id": "28",
-      "tgId": "319324257",
-      "nick": "Murinelli",
-      "date": "2026-09-25",
-      "dmg": 16480000000000,
-      "raw": "16.48undefined",
-      "ts": 1790332544,
-      "proof": "proofs/p_28.jpg"
-    },
-    {
       "id": "36",
       "tgId": "2006381722",
       "nick": "podpivas",
@@ -191,7 +181,16 @@
       "raw": "94.39T",
       "ts": 1790332669,
       "proof": "proofs/p_47.jpg"
+    },
+    {
+      "id": "51",
+      "tgId": "319324257",
+      "nick": "Murinelli",
+      "date": "2026-09-25",
+      "dmg": 999990000000000,
+      "raw": "999.99undefined",
+      "ts": 1790332688
     }
   ],
-  "updatedAt": "2026-09-25T10:38:03.676Z"
+  "updatedAt": "2026-09-25T10:38:18.062Z"
 }
