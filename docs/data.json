@@ -1,11 +1,19 @@
 {
-  "offset": 535524577,
+  "offset": 535524578,
   "state": {
     "339274325": {
       "await": "nick"
     },
     "362568347": {
       "await": "nick"
+    },
+    "6920006325": {
+      "await": "confirm",
+      "fileId": "AgACAgIAAxkBAAMvarZO6A9bLceuEixe71bb9Tf_018AAusaaxvfBbFJ7Oi3dZjD_zQBAAMCAAN5AAM9BA",
+      "proof": "proofs/p_47.jpg",
+      "dmg": 94390000000000,
+      "raw": "94.39T",
+      "msgId": 47
     }
   },
   "users": {
@@ -180,5 +188,5 @@
       "proof": "proofs/p_36.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:37:13.930Z"
+  "updatedAt": "2026-09-25T10:37:46.726Z"
 }
