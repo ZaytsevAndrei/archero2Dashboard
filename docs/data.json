@@ -1,5 +1,5 @@
 {
-  "offset": 535524634,
+  "offset": 535524643,
   "state": {
     "473463802": {
       "await": "nick"
@@ -53,6 +53,18 @@
       "joined": "2026-09-25T11:25:34.499Z",
       "tgUsername": "ReDmOnD211",
       "first": "ReDmOnD211"
+    },
+    "915662493": {
+      "nick": "CLAFTT",
+      "joined": "2026-09-25T13:58:23.893Z",
+      "tgUsername": "CLAFTT",
+      "first": "Вячеслав"
+    },
+    "1932792747": {
+      "nick": "ClownFiesta",
+      "joined": "2026-09-25T14:37:52.314Z",
+      "tgUsername": "ncFiesta",
+      "first": "ncF"
     },
     "2006381722": {
       "nick": "podpivas",
@@ -305,7 +317,47 @@
       "raw": "28.17T",
       "ts": 1790339866,
       "proof": "proofs/p_144.jpg"
+    },
+    {
+      "id": "147",
+      "tgId": "8768065115",
+      "nick": "ipunany",
+      "date": "2026-09-25",
+      "dmg": 12220000000000,
+      "raw": "12.22T",
+      "ts": 1790341891,
+      "proof": "proofs/p_147.jpg"
+    },
+    {
+      "id": "153",
+      "tgId": "915662493",
+      "nick": "CLAFTT",
+      "date": "2026-09-25",
+      "dmg": 17750000000000,
+      "raw": "17.75T",
+      "ts": 1790344719,
+      "proof": "proofs/p_153.jpg"
+    },
+    {
+      "id": "161",
+      "tgId": "1932792747",
+      "nick": "ClownFiesta",
+      "date": "2026-09-25",
+      "dmg": 22170000000000,
+      "raw": "22.17T",
+      "ts": 1790347306,
+      "proof": "proofs/p_161.jpg"
+    },
+    {
+      "id": "163",
+      "tgId": "319324257",
+      "nick": "Murinelli",
+      "date": "2026-09-25",
+      "dmg": 16480000000000,
+      "raw": "16.48T",
+      "ts": 1790347363,
+      "proof": "proofs/p_163.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T12:37:54.558Z"
+  "updatedAt": "2026-09-25T14:42:53.512Z"
 }
