@@ -1,16 +1,8 @@
 {
-  "offset": 535524604,
+  "offset": 535524605,
   "state": {
     "473463802": {
       "await": "nick"
-    },
-    "8724867938": {
-      "await": "confirm",
-      "fileId": "AgACAgQAAxkBAANOarZXubwiCzmo6ukQCtVfa0IPiAUAAlMPaxuj7bFRXqTrXzwcYJ0BAAMCAAN3AAM9BA",
-      "proof": "proofs/p_78.jpg",
-      "dmg": 168520000000000,
-      "raw": "168.52T",
-      "msgId": 78
     }
   },
   "users": {
@@ -233,7 +225,17 @@
       "raw": "1.64T",
       "ts": 1790332845,
       "proof": "proofs/p_62.jpg"
+    },
+    {
+      "id": "78",
+      "tgId": "8724867938",
+      "nick": "CGR",
+      "date": "2026-09-25",
+      "dmg": 168520000000000,
+      "raw": "168.52T",
+      "ts": 1790334959,
+      "proof": "proofs/p_78.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T11:27:30.039Z"
+  "updatedAt": "2026-09-25T11:41:39.587Z"
 }
