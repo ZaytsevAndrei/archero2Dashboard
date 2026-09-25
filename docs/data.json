@@ -1,5 +1,5 @@
 {
-  "offset": 535524574,
+  "offset": 535524575,
   "state": {
     "362568347": {
       "await": "nick"
@@ -11,9 +11,6 @@
       "dmg": 228270000000000,
       "raw": "228.27T",
       "msgId": 36
-    },
-    "6920006325": {
-      "await": "nick"
     }
   },
   "users": {
@@ -40,6 +37,12 @@
       "joined": "2026-09-25T10:36:07.182Z",
       "tgUsername": "podpivas46",
       "first": "Макс"
+    },
+    "6920006325": {
+      "nick": "SinfulMonkey",
+      "joined": "2026-09-25T10:36:58.939Z",
+      "tgUsername": "riv_36",
+      "first": "Ваня."
     }
   },
   "entries": [
@@ -172,5 +175,5 @@
       "proof": "proofs/p_28.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:36:49.030Z"
+  "updatedAt": "2026-09-25T10:36:58.941Z"
 }
