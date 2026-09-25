@@ -1,6 +1,10 @@
 {
-  "offset": 535524661,
-  "state": {},
+  "offset": 535524662,
+  "state": {
+    "641968840": {
+      "await": "nick"
+    }
+  },
   "users": {
     "176147068": {
       "nick": "Dragon",
@@ -415,5 +419,5 @@
       "proof": "proofs/p_192.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T19:33:22.874Z"
+  "updatedAt": "2026-09-25T20:16:49.185Z"
 }
