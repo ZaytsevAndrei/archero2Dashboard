@@ -1,13 +1,10 @@
 {
-  "offset": 535524582,
+  "offset": 535524583,
   "state": {
     "339274325": {
       "await": "damage",
       "fileId": "AgACAgIAAxkBAAM2arZPIwxlLOQOPXXHDeZ-n0NgK7cAAnQgaxvmErBJsCjtIyRrZM4BAAMCAAN5AAM9BA",
       "msgId": 54
-    },
-    "362568347": {
-      "await": "nick"
     }
   },
   "users": {
@@ -34,6 +31,12 @@
       "joined": "2026-09-25T10:37:49.499Z",
       "tgUsername": "AndrewTelkov",
       "first": "Andrew"
+    },
+    "362568347": {
+      "nick": "ViTaLiZeR",
+      "joined": "2026-09-25T10:39:16.434Z",
+      "tgUsername": "Vitaliy_Konkov",
+      "first": "ViTaL"
     },
     "2006381722": {
       "nick": "podpivas",
@@ -197,5 +200,5 @@
       "ts": 1790332688
     }
   ],
-  "updatedAt": "2026-09-25T10:39:02.376Z"
+  "updatedAt": "2026-09-25T10:39:16.435Z"
 }
