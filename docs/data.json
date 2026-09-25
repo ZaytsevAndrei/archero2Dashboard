@@ -1,5 +1,5 @@
 {
-  "offset": 535524661,
+  "offset": 535524664,
   "state": {},
   "users": {
     "176147068": {
@@ -55,6 +55,12 @@
       "joined": "2026-09-25T12:35:23.247Z",
       "tgUsername": "accord11",
       "first": "Gerasim"
+    },
+    "641968840": {
+      "nick": "PabLo",
+      "joined": "2026-09-25T20:17:01.483Z",
+      "tgUsername": "passha999",
+      "first": "Павел"
     },
     "708150494": {
       "nick": "Privedko",
@@ -413,7 +419,17 @@
       "raw": "32.9T",
       "ts": 1790364161,
       "proof": "proofs/p_192.jpg"
+    },
+    {
+      "id": "204",
+      "tgId": "641968840",
+      "nick": "PabLo",
+      "date": "2026-09-25",
+      "dmg": 28170000000000,
+      "raw": "28.17T",
+      "ts": 1790367429,
+      "proof": "proofs/p_204.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T19:33:22.874Z"
+  "updatedAt": "2026-09-25T20:17:18.718Z"
 }
