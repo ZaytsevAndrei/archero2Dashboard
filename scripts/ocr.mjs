@@ -31,10 +31,11 @@ function lev(a, b) {
   return prev[n];
 }
 
-/* токен-урон: «5.91T», «37.427»(T читается как 7), «209.77T», «700M», «12K» → { dmg, raw } */
+/* токен-урон: «5.91T», «37.427»/«168.521»/«6.371» (T читается как 7/1), «6.37%»,
+   «94.З9Т» (кириллические З/О вместо 3/0), «700M», «12K» → { dmg, raw } */
 export function parseDamageToken(tok) {
-  const s = String(tok);
-  let m = s.match(/^(\d{1,4})[.,](\d{2})(?:[TТ7]|$)/); // 5.91T / 37.427 / 19,60
+  const s = String(tok).replace(/[Оо]/g, '0').replace(/[Зз]/g, '3');
+  let m = s.match(/^(\d{1,4})[.,](\d{2})(?:[TТт71%]|$)/); // 5.91T / 37.427 / 6.37% / 19,60
   if (m) {
     const num = parseFloat(`${m[1]}.${m[2]}`);
     return { dmg: Math.round(num * 1e12), raw: `${num}T` };
@@ -101,6 +102,28 @@ export async function ocrOwnRow(imagePath, nick) {
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
     const dmgOf = (toks) => toks.map(parseDamageToken).find(Boolean) || null;
 
+    /* полоса кадра ×5, распознанная в двух режимах сегментации (PSM 7 «одна
+       строка» и PSM 11 «разреженный текст») → [{psm, lines, text}] */
+    async function ocrStrip(x0, y0, y1) {
+      const strip = img.clone().crop({ x: x0, y: y0, w: width - x0, h: y1 - y0 });
+      strip.resize({ w: strip.bitmap.width * 5 });
+      strip.greyscale();
+      const tmp2 = imagePath + '.row.png';
+      await strip.write(tmp2);
+      try {
+        const out = [];
+        for (const psm of ['7', '11']) {
+          await worker.setParameters({ tessedit_pageseg_mode: psm });
+          const { data: d2 } = await worker.recognize(tmp2, {}, { blocks: true });
+          const words2 = [];
+          for (const b of d2.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || [])
+            words2.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
+          out.push({ psm, lines: groupLines(words2), text: d2.text });
+        }
+        return out;
+      } finally { try { unlinkSync(tmp2); } catch {} }
+    }
+
     /* повторный проход по строке ника: кроп из исходника вокруг неё, ×5, PSM «одна
        строка» — основной проход ×3 теряет урон в строке, обрезанной нижним краем
        кадра (свою строку игроки часто ловят у самого низа списка) */
@@ -113,37 +136,59 @@ export async function ocrOwnRow(imagePath, nick) {
       // строк уже нет, взять чужой урон нельзя
       const toEdge = y0 > height * 0.7;
       const y1 = toEdge ? height : Math.min(height, nickBottom + 36);
-      const strip = img.clone().crop({ x: x0, y: y0, w: width - x0, h: y1 - y0 });
-      strip.resize({ w: strip.bitmap.width * 5 });
-      strip.greyscale();
-      const tmp2 = imagePath + '.row.png';
-      await strip.write(tmp2);
-      try {
-        for (const psm of ['7', '11']) {
-          await worker.setParameters({ tessedit_pageseg_mode: psm });
-          const { data: d2 } = await worker.recognize(tmp2, {}, { blocks: true });
-          const toks = [];
-          for (const b of d2.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || []) toks.push(w.text);
-          if (!toks.length && d2.text) toks.push(...String(d2.text).split(/\s+/).filter(Boolean));
-          const hit = toks.map(parseDamageToken).find(Boolean);
-          if (hit) return hit;
-        }
-        return null;
-      } finally { try { unlinkSync(tmp2); } catch {} }
+      for (const { lines: slines, text } of await ocrStrip(x0, y0, y1)) {
+        const toks = slines.flatMap((l) => l.words.map((w) => w.text));
+        if (!toks.length && text) toks.push(...String(text).split(/\s+/).filter(Boolean));
+        const hit = toks.map(parseDamageToken).find(Boolean);
+        if (hit) return hit;
+      }
+      return null;
     }
 
-    // приоритет ассоциации «ник → урон»: своя строка → следующая → предыдущая
-    // (у обычных строк урон в той же/следующей строке, у пьедестала — строкой выше)
+    /* основной проход может убить ник (тёмная плашка, строка наполовину обрезана
+       краем кадра — урон выжил, имя превратилось в мусор). Тогда перечитываем
+       крупно каждую строку с числом урона и ищем ник уже в полосе */
+    async function reocrByDamage(anchor) {
+      const y0 = Math.max(0, CROP_TOP + Math.floor(anchor.y / SCALE) - 20); // ник часто выше числа
+      const anchorBottom = CROP_TOP + Math.ceil((anchor.y + anchor.h) / SCALE);
+      const y1 = y0 > height * 0.7 ? height : Math.min(height, anchorBottom + 36);
+      for (const { lines: slines } of await ocrStrip(0, y0, y1)) {
+        for (let i = 0; i < slines.length; i++) {
+          if (!slines[i].words.some((w) => isNick(w.text))) continue;
+          const hit = dmgOf(toksOf(slines[i])) || dmgOf(toksOf(slines[i + 1])) || dmgOf(toksOf(slines[i - 1]));
+          if (hit) return hit;
+        }
+      }
+      return null;
+    }
+
+    // приоритет ассоциации «ник → урон»: своя строка → следующая → повторное
+    // чтение своей строки крупно (низ списка часто обрезан краем кадра, урон
+    // добирается зумом) → предыдущая (соседи — чужие значения, это последний шанс)
     const rows = [];
     for (let i = 0; i < lines.length; i++) {
       const nickWord = lines[i].words.find((w) => isNick(w.text));
       if (!nickWord) continue;
-      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || dmgOf(toksOf(lines[i - 1])) || await reocrRow(nickWord);
-      if (d) rows.push(d);
+      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || await reocrRow(nickWord) || dmgOf(toksOf(lines[i - 1]));
+      if (d) rows.push({ d, y: lines[i].y });
+    }
+    if (!rows.length) {
+      for (const l of lines) {
+        const anchor = l.words.find((w) => parseDamageToken(w.text));
+        if (anchor) { const d = await reocrByDamage(anchor); if (d) rows.push({ d, y: l.y }); }
+      }
     }
     if (!rows.length) return null;
-    rows.sort((a, b) => b.dmg - a.dmg); // если ник попал в несколько строк — берём максимум
-    return rows[0];
+    // игра закрепляет собственную строку игрока внизу списка — при нескольких
+    // совпадениях берём её, а не максимум: рядом с пьедесталом топ-3 лежит счётчик
+    // общего урона гильдии, который легко принять за урон игрока. Но закреплённая
+    // строка бывает обрезана краем кадра и теряет первую цифру (94.39 → 04.30):
+    // если её значение в разы меньше другой строки того же ника — верим большей
+    rows.sort((a, b) => (b.y - a.y) || (b.d.dmg - a.d.dmg));
+    let best = rows[0];
+    const alt = rows.slice(1).sort((a, b) => b.d.dmg - a.d.dmg)[0];
+    if (alt && best.d.dmg * 4 < alt.d.dmg) best = alt;
+    return best.d;
   } finally {
     await worker.terminate();
   }

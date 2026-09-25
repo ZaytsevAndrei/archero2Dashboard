@@ -22,7 +22,7 @@
  * Зависимости для OCR (jimp, tesseract.js) опциональны — ставятся через npm install
  * в workflow; без них бот просто просит урон текстом.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { ocrOwnRow } from './ocr.mjs';
@@ -127,6 +127,33 @@ async function downloadProof(fileId, updateId) {
     } catch (e) { console.error(`proof download (round ${round}) failed:`, e.message); }
   }
   return null;
+}
+
+/* пруфы старше 7 дней удаляем (файл + ссылка в записи): записи урона остаются,
+ * картинки тяжёлые — репозиторий не должен пухнуть. 7 дней считаем включительно:
+ * сегодня + 6 дней назад; с 8-го дня пруфа нет */
+function pruneProofs() {
+  const keepFrom = localDate(Date.now() / 1000 - 6 * 86400);
+  const keep = new Set();
+  for (const e of data.entries) {
+    if (!e.proof) continue;
+    if (e.date >= keepFrom) keep.add(path.basename(e.proof));
+    else delete e.proof;
+  }
+  let removed = 0;
+  if (!existsSync(PROOFS_DIR)) return removed;
+  for (const f of readdirSync(PROOFS_DIR)) {
+    if (keep.has(f) || !/^p_.+\.(jpe?g|png|webp)$/i.test(f)) continue; // .gitkeep и прочее не трогаем
+    const p = path.join(PROOFS_DIR, f);
+    try {
+      // осиротевшие файлы (перезапись за тот же день, неудачный OCR) больше никому не нужны —
+      // удаляем сразу, но даём 30 минут на случай ещё идущей обработки скрина
+      if (Date.now() - statSync(p).mtimeMs < 30 * 60e3) continue;
+      unlinkSync(p); removed++;
+    } catch (e) { console.error('prune unlink:', f, e.message); }
+  }
+  if (removed) console.log(`prune: удалено пруфов: ${removed}`);
+  return removed;
 }
 
 // ---------- handlers ----------
@@ -298,6 +325,7 @@ async function handleMessage(msg) {
 
 // ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
 async function main() {
+  pruneProofs(); // пруфы старше 7 дней — в начале запуска
   let processed = 0;
   let nullStreak = 0;
   for (let i = 0; i < 10; i++) {
@@ -362,7 +390,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* непрерывный long polling: сообщения подхватываются за секунды, а не раз в 5 минут */
 async function loop() {
   console.log(`[bot] непрерывный опрос запущен (${new Date().toISOString()}, TZ=${TZ})`);
+  let lastPruneDay = '';
   for (;;) {
+    // раз в сутки (по московской дате) — чистка пруфов старше 7 дней
+    const day = localDate(Date.now() / 1000);
+    if (day !== lastPruneDay) {
+      lastPruneDay = day;
+      const before = snapshot();
+      pruneProofs();
+      if (snapshot() !== before) { saveData(); await pushData(); }
+    }
     let updates = null;
     try {
       updates = await tg('getUpdates', { offset: data.offset, timeout: 50, allowed_updates: ['message', 'callback_query', 'channel_post'] });
@@ -390,6 +427,14 @@ async function loop() {
     console.log(`[bot] обработано ${n}, записей всего: ${data.entries.filter((e) => !e.demo).length}`);
     await pushData();
   }
+}
+
+/* разовая чистка пруфов без опроса Telegram: PRUNE_ONLY=1 node scripts/poll.mjs */
+if (process.env.PRUNE_ONLY) {
+  const before = snapshot();
+  pruneProofs();
+  if (snapshot() !== before) saveData(); // файлы уже удалены; data.json — только если менялись записи
+  process.exit(0);
 }
 
 if (process.env.BOT_LOOP) loop();
