@@ -68,18 +68,20 @@ export async function ocrOwnRow(imagePath, nick) {
   try { img = await Jimp.read(imagePath); } catch { return null; }
   const { width, height } = img.bitmap;
 
-  // область рейтинга: от шапки до нижней панели с кнопками (~12% снизу).
-  // Своя строка может быть где угодно по высоте — у каждого свой ранг,
-  // нижняя часть экрана тоже нужна (внизу видны цифры отправителя).
+  // зона рейтинга: почти весь экран (8%–97% по высоте, без боковых кропов) —
+  // своя строка может быть и последней видимой внизу, её подрезать нельзя.
+  // Масштаб ×3: ×2 заметно теряет мелкие цифры урона на плашках.
   const list = img.clone().crop({
-    x: 0, y: Math.floor(height * 0.12), w: width, h: Math.ceil(height * 0.76),
+    x: 0, y: Math.floor(height * 0.08), w: width, h: Math.ceil(height * 0.89),
   });
   list.resize({ w: width * 3 });
   list.greyscale();
 
   const tmp = imagePath + '.list.png';
   await list.write(tmp);
-  const worker = await createWorker('eng', 1, {
+  // rus подключаем, если модель лежит в tessdata (кириллические ники)
+  const langs = existsSync(path.join(TESSDATA_DIR, 'rus.traineddata')) ? 'eng+rus' : 'eng';
+  const worker = await createWorker(langs, 1, {
     langPath: TESSDATA_DIR, // данные языка лежат в репо — без скачивания
     cacheMethod: 'none',
     gzip: false,

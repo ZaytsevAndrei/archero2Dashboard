@@ -155,7 +155,7 @@ function handleCommand(msg) {
       '',
       'Как отметиться:',
       'отправь скриншот рейтинга — я сам распознаю твой урон и попрошу подтвердить',
-      '(не разберу — попрошу ввести числом)',
+      '(не разберу — попрошу скрин получше)',
       '',
       `Сайт: ${SITE_URL}`,
     ].join('\n'));
@@ -211,12 +211,12 @@ async function processPhoto(uid, chatId, fileId, msgId) {
       chat_id: chatId,
       text: `Скрин распознал 🔎\n${data.users[uid].nick} — ${fmtDmg(ocr.dmg)}\nЗаписать за сегодня?`,
       reply_markup: { inline_keyboard: [
-        [{ text: '✅ Записать', callback_data: 'ocr_yes' }, { text: '✏️ Ввести вручную', callback_data: 'ocr_no' }],
+        [{ text: '✅ Записать', callback_data: 'ocr_yes' }],
       ] },
     });
   } else {
-    data.state[uid] = { await: 'damage', fileId, msgId, ...(proof ? { proof } : {}) };
-    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nПопробуй прислать скриншот ещё раз — чётче и покрупнее.\nНе выйдет — напиши урон числом: 5.91T');
+    delete data.state[uid];
+    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nПришли скриншот ещё раз — чётче и покрупнее: весь экран рейтинга после боя, без обрезки краёв.');
   }
 }
 
@@ -234,8 +234,9 @@ async function handleCallback(q) {
       ? `✅ Записал: ${fmtDmg(st.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`
       : 'Что-то сломалось, попробуй прислать урон текстом: 5.91T');
   } else if (q.data === 'ocr_no') {
-    data.state[uid] = { await: 'damage', fileId: st.fileId, msgId: st.msgId, ...(st.proof ? { proof: st.proof } : {}) };
-    send(q.from.id, 'Ок, напиши урон числом: 5.91T');
+    // кнопка «Ввести вручную» удалена; на старых сообщениях — вежливо перенаправляем
+    delete data.state[uid];
+    send(q.from.id, 'Ручной ввод убрали — пришли скриншот получше, и я распознаю урон сам.');
   }
 }
 
@@ -296,22 +297,9 @@ async function handleMessage(msg) {
     return;
   }
 
-  // урон текстом (в т.ч. вместо кнопок подтверждения)
-  const parsed = parseDamage(text);
-  if (parsed) {
-    if (!data.users[uid]) {
-      if (group && msg.from.username) data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), ...meta };
-      else {
-        data.state[uid] = { await: 'nick' };
-        send(msg.chat.id, group ? 'Сначала зарегистрируйся в личке: @Archero2Unity_bot' : 'Напиши сначала свой игровой ник:');
-        return;
-      }
-    }
-    const date = localDate(msg.date);
-    const proof = st.proof || (st.fileId ? await downloadProof(st.fileId, msg.message_id) : null);
-    recordEntry(uid, msg.message_id, date, parsed.dmg, parsed.raw, msg.date, proof);
-    delete data.state[uid];
-    send(msg.chat.id, `✅ Записал: ${fmtDmg(parsed.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`);
+  // ручной ввод урона отключён — запись только со скриншота
+  if (parseDamage(text)) {
+    if (!group) send(msg.chat.id, 'Числа больше не принимаю 🙈 Пришли скриншот рейтинга — урон распознаю с него.');
     return;
   }
 
