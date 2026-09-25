@@ -1,16 +1,8 @@
 {
-  "offset": 535524579,
+  "offset": 535524580,
   "state": {
     "362568347": {
       "await": "nick"
-    },
-    "6920006325": {
-      "await": "confirm",
-      "fileId": "AgACAgIAAxkBAAMvarZO6A9bLceuEixe71bb9Tf_018AAusaaxvfBbFJ7Oi3dZjD_zQBAAMCAAN5AAM9BA",
-      "proof": "proofs/p_47.jpg",
-      "dmg": 94390000000000,
-      "raw": "94.39T",
-      "msgId": 47
     }
   },
   "users": {
@@ -189,7 +181,17 @@
       "raw": "228.27T",
       "ts": 1790332609,
       "proof": "proofs/p_36.jpg"
+    },
+    {
+      "id": "47",
+      "tgId": "6920006325",
+      "nick": "SinfulMonkey",
+      "date": "2026-09-25",
+      "dmg": 94390000000000,
+      "raw": "94.39T",
+      "ts": 1790332669,
+      "proof": "proofs/p_47.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:37:49.501Z"
+  "updatedAt": "2026-09-25T10:38:03.676Z"
 }
