@@ -44,6 +44,14 @@ function heatColor(v, max) {
   return `hsl(${hue}, 65%, ${18 + 14 * r}%)`;
 }
 
+/* цвет полосы рейтинга по месту: топ-25% зелёные, середина жёлтая, низ-25% красные */
+function rankColor(idx, total) {
+  if (total <= 1) return 'hsl(140, 72%, 48%)';
+  const t = idx / (total - 1); // 0 = первое место, 1 = последнее
+  const hue = t < 0.5 ? 140 - 80 * (t / 0.5) : 60 - 60 * ((t - 0.5) / 0.5);
+  return `hsl(${Math.round(hue)}, 72%, 48%)`;
+}
+
 /* ---------- данные ---------- */
 async function loadData() {
   try {
@@ -172,7 +180,7 @@ function renderDayPanel(map) {
         <span class="name">${esc(e.nick)}</span>
         ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="Открыть скриншот">🧾</button>` : ''}
         <span class="total">${fmtDmg(e.dmg)}</span>
-        <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%"></i></span>
+        <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%;background:${rankColor(i, rows.length)}"></i></span>
       </li>`).join('')
     : `<li class="today-none">За этот день урона не присылали 🏹</li>`;
 
@@ -183,7 +191,8 @@ function renderDayPanel(map) {
 
 function renderLeaderboard(nicks, byNick, map) {
   const best = nicks.length ? byNick.get(nicks[0]).total : 1;
-  $('leaderboard').innerHTML = nicks.slice(0, 20).map((nick, i) => {
+  const shown = nicks.slice(0, 20);
+  $('leaderboard').innerHTML = shown.map((nick, i) => {
     const st = byNick.get(nick);
     let bestDay = null;
     for (const [k, e] of map) if (k.startsWith(nick + '|') && (!bestDay || e.dmg > bestDay.dmg)) bestDay = e;
@@ -192,7 +201,7 @@ function renderLeaderboard(nicks, byNick, map) {
       <span class="rank">${i + 1}</span>
       <span class="name">${esc(nick)}</span>
       <span class="total">${fmtDmg(st.total)}</span>
-      <span class="bar"><i style="width:${w}%"></i></span>
+      <span class="bar"><i style="width:${w}%;background:${rankColor(i, shown.length)}"></i></span>
       <span class="meta">${st.days} дн. · лучший день ${bestDay ? fmtDmg(bestDay.dmg) : '—'}</span>
     </li>`;
   }).join('') || '<li class="meta" style="grid-template-columns:1fr">Пока нет данных.</li>';

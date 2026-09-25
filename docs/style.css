@@ -155,6 +155,7 @@ header {
 .today-none { color: var(--muted); padding: 6px 2px; }
 .proof-btn {
   grid-column: 4;
+  grid-row: 1;
   justify-self: start;
   background: transparent;
   border: 1px solid var(--border);
@@ -179,21 +180,23 @@ header {
   gap: 4px 12px;
   align-items: center;
 }
-.leaderboard .rank { font-size: 18px; font-weight: 800; color: var(--muted); text-align: center; }
+.leaderboard .rank { grid-column: 1; grid-row: 1; font-size: 18px; font-weight: 800; color: var(--muted); text-align: center; }
 .leaderboard li:nth-child(1) .rank { color: #ffd700; }
 .leaderboard li:nth-child(2) .rank { color: #c0c0c0; }
 .leaderboard li:nth-child(3) .rank { color: #cd7f32; }
-.leaderboard .name { font-weight: 700; }
+.leaderboard .name { grid-column: 2; grid-row: 1; font-weight: 700; }
 .leaderboard .bar {
-  grid-column: 2 / 4;
+  grid-column: 2 / -1;
+  grid-row: 2;
   height: 5px;
+  margin-top: 3px;
   border-radius: 3px;
   background: var(--border);
   overflow: hidden;
 }
 .leaderboard .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
-.leaderboard .total { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-.leaderboard .meta { color: var(--muted); font-size: 12px; grid-column: 2 / 4; margin-top: -2px; }
+.leaderboard .total { grid-column: 3; grid-row: 1; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.leaderboard .meta { grid-column: 2 / -1; grid-row: 3; color: var(--muted); font-size: 12px; margin-top: -2px; }
 
 .howto { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .howto a { color: var(--accent); }
