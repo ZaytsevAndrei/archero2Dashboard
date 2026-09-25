@@ -1,9 +1,6 @@
 {
-  "offset": 535524578,
+  "offset": 535524579,
   "state": {
-    "339274325": {
-      "await": "nick"
-    },
     "362568347": {
       "await": "nick"
     },
@@ -34,6 +31,12 @@
       "joined": "2026-09-25T10:33:53.719Z",
       "tgUsername": "serezhha_molodec",
       "first": "Сергей"
+    },
+    "339274325": {
+      "nick": "ФиксЕк",
+      "joined": "2026-09-25T10:37:49.499Z",
+      "tgUsername": "AndrewTelkov",
+      "first": "Andrew"
     },
     "2006381722": {
       "nick": "podpivas",
@@ -188,5 +191,5 @@
       "proof": "proofs/p_36.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:37:46.726Z"
+  "updatedAt": "2026-09-25T10:37:49.501Z"
 }
