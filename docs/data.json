@@ -1,10 +1,7 @@
 {
-  "offset": 535524636,
+  "offset": 535524637,
   "state": {
     "473463802": {
-      "await": "nick"
-    },
-    "915662493": {
       "await": "nick"
     }
   },
@@ -56,6 +53,12 @@
       "joined": "2026-09-25T11:25:34.499Z",
       "tgUsername": "ReDmOnD211",
       "first": "ReDmOnD211"
+    },
+    "915662493": {
+      "nick": "CLAFTT",
+      "joined": "2026-09-25T13:58:23.893Z",
+      "tgUsername": "CLAFTT",
+      "first": "Вячеслав"
     },
     "2006381722": {
       "nick": "podpivas",
@@ -320,5 +323,5 @@
       "proof": "proofs/p_147.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T13:58:01.408Z"
+  "updatedAt": "2026-09-25T13:58:23.895Z"
 }
