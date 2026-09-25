@@ -1,10 +1,7 @@
 {
-  "offset": 535524618,
+  "offset": 535524619,
   "state": {
     "473463802": {
-      "await": "nick"
-    },
-    "6424213223": {
       "await": "nick"
     }
   },
@@ -80,6 +77,12 @@
       "joined": "2026-09-25T12:05:48.010Z",
       "tgUsername": "BA3OOKA",
       "first": "Вадим"
+    },
+    "6424213223": {
+      "nick": "WonLt",
+      "joined": "2026-09-25T12:20:08.329Z",
+      "tgUsername": null,
+      "first": "WonLt"
     }
   },
   "entries": [
@@ -262,5 +265,5 @@
       "proof": "proofs/p_107.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T12:19:51.929Z"
+  "updatedAt": "2026-09-25T12:20:08.331Z"
 }
