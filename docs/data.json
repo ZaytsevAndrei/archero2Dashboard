@@ -1,13 +1,10 @@
 {
-  "offset": 535524592,
+  "offset": 535524593,
   "state": {
     "473463802": {
       "await": "nick"
     },
     "8768065115": {
-      "await": "nick"
-    },
-    "8724867938": {
       "await": "nick"
     }
   },
@@ -53,6 +50,12 @@
       "joined": "2026-09-25T10:36:58.939Z",
       "tgUsername": "riv_36",
       "first": "Ваня."
+    },
+    "8724867938": {
+      "nick": "CGR",
+      "joined": "2026-09-25T11:13:22.218Z",
+      "tgUsername": null,
+      "first": "Ahmet"
     }
   },
   "entries": [
@@ -215,5 +218,5 @@
       "proof": "proofs/p_62.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T11:12:55.818Z"
+  "updatedAt": "2026-09-25T11:13:22.221Z"
 }
