@@ -1,6 +1,11 @@
 {
-  "offset": 535524581,
+  "offset": 535524582,
   "state": {
+    "339274325": {
+      "await": "damage",
+      "fileId": "AgACAgIAAxkBAAM2arZPIwxlLOQOPXXHDeZ-n0NgK7cAAnQgaxvmErBJsCjtIyRrZM4BAAMCAAN5AAM9BA",
+      "msgId": 54
+    },
     "362568347": {
       "await": "nick"
     }
@@ -192,5 +197,5 @@
       "ts": 1790332688
     }
   ],
-  "updatedAt": "2026-09-25T10:38:18.062Z"
+  "updatedAt": "2026-09-25T10:39:02.376Z"
 }
