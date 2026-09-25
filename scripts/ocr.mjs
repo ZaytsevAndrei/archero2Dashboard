@@ -71,10 +71,11 @@ export async function ocrOwnRow(imagePath, nick) {
   // зона рейтинга: почти весь экран (8%–97% по высоте, без боковых кропов) —
   // своя строка может быть и последней видимой внизу, её подрезать нельзя.
   // Масштаб ×3: ×2 заметно теряет мелкие цифры урона на плашках.
+  const CROP_TOP = Math.floor(height * 0.08), SCALE = 3;
   const list = img.clone().crop({
-    x: 0, y: Math.floor(height * 0.08), w: width, h: Math.ceil(height * 0.89),
+    x: 0, y: CROP_TOP, w: width, h: Math.ceil(height * 0.89),
   });
-  list.resize({ w: width * 3 });
+  list.resize({ w: width * SCALE });
   list.greyscale();
 
   const tmp = imagePath + '.list.png';
@@ -100,12 +101,44 @@ export async function ocrOwnRow(imagePath, nick) {
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
     const dmgOf = (toks) => toks.map(parseDamageToken).find(Boolean) || null;
 
+    /* повторный проход по строке ника: кроп из исходника вокруг неё, ×5, PSM «одна
+       строка» — основной проход ×3 теряет урон в строке, обрезанной нижним краем
+       кадра (свою строку игроки часто ловят у самого низа списка) */
+    async function reocrRow(nickWord) {
+      const x0 = Math.max(0, Math.floor(nickWord.x / SCALE) - 12);
+      const y0 = Math.max(0, CROP_TOP + Math.floor(nickWord.y / SCALE) - 8);
+      const nickBottom = CROP_TOP + Math.ceil((nickWord.y + nickWord.h) / SCALE);
+      // строка в нижней четверти кадра → тянем полосу до края: у обрезанной
+      // наполовину строки цифры урона ниже bbox ника; ниже своей строки других
+      // строк уже нет, взять чужой урон нельзя
+      const toEdge = y0 > height * 0.7;
+      const y1 = toEdge ? height : Math.min(height, nickBottom + 36);
+      const strip = img.clone().crop({ x: x0, y: y0, w: width - x0, h: y1 - y0 });
+      strip.resize({ w: strip.bitmap.width * 5 });
+      strip.greyscale();
+      const tmp2 = imagePath + '.row.png';
+      await strip.write(tmp2);
+      try {
+        for (const psm of ['7', '11']) {
+          await worker.setParameters({ tessedit_pageseg_mode: psm });
+          const { data: d2 } = await worker.recognize(tmp2, {}, { blocks: true });
+          const toks = [];
+          for (const b of d2.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || []) toks.push(w.text);
+          if (!toks.length && d2.text) toks.push(...String(d2.text).split(/\s+/).filter(Boolean));
+          const hit = toks.map(parseDamageToken).find(Boolean);
+          if (hit) return hit;
+        }
+        return null;
+      } finally { try { unlinkSync(tmp2); } catch {} }
+    }
+
     // приоритет ассоциации «ник → урон»: своя строка → следующая → предыдущая
     // (у обычных строк урон в той же/следующей строке, у пьедестала — строкой выше)
     const rows = [];
     for (let i = 0; i < lines.length; i++) {
-      if (!toksOf(lines[i]).some(isNick)) continue;
-      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || dmgOf(toksOf(lines[i - 1]));
+      const nickWord = lines[i].words.find((w) => isNick(w.text));
+      if (!nickWord) continue;
+      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || dmgOf(toksOf(lines[i - 1])) || await reocrRow(nickWord);
       if (d) rows.push(d);
     }
     if (!rows.length) return null;
