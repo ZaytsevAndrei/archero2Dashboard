@@ -1,11 +1,6 @@
 {
-  "offset": 535524584,
+  "offset": 535524585,
   "state": {
-    "339274325": {
-      "await": "damage",
-      "fileId": "AgACAgIAAxkBAAM2arZPIwxlLOQOPXXHDeZ-n0NgK7cAAnQgaxvmErBJsCjtIyRrZM4BAAMCAAN5AAM9BA",
-      "msgId": 54
-    },
     "362568347": {
       "await": "damage",
       "fileId": "AgACAgIAAxkBAAM6arZPXrUS9EGZrktBl0uhsGSKL8QAAsYhaxs_jblJXi9FnwXbOgsBAAMCAAN3AAM9BA",
@@ -203,7 +198,17 @@
       "dmg": 999990000000000,
       "raw": "999.99undefined",
       "ts": 1790332688
+    },
+    {
+      "id": "60",
+      "tgId": "339274325",
+      "nick": "ФиксЕк",
+      "date": "2026-09-25",
+      "dmg": 6370000000000,
+      "raw": "6.37T",
+      "ts": 1790332832,
+      "proof": "proofs/p_60.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:40:04.781Z"
+  "updatedAt": "2026-09-25T10:40:33.064Z"
 }
