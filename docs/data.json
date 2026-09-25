@@ -1,15 +1,6 @@
 {
-  "offset": 535524561,
-  "state": {
-    "176147068": {
-      "await": "confirm",
-      "fileId": "AgACAgIAAxkBAAMParZHzJq7ZyC8xLnWLDnlegjFYPAAAiocaxvBc7BJzbCG86iI3BQBAAMCAAN5AAM9BA",
-      "proof": "proofs/p_15.jpg",
-      "dmg": 15430000000000,
-      "raw": "15.43T",
-      "msgId": 15
-    }
-  },
+  "offset": 535524562,
+  "state": {},
   "users": {
     "176147068": {
       "nick": "Dragon",
@@ -126,7 +117,17 @@
       "raw": "5.91T",
       "ts": 1790150580,
       "demo": true
+    },
+    {
+      "id": "15",
+      "tgId": "176147068",
+      "nick": "Dragon",
+      "date": "2026-09-25",
+      "dmg": 15430000000000,
+      "raw": "15.43T",
+      "ts": 1790330838,
+      "proof": "proofs/p_15.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:07:15.643Z"
+  "updatedAt": "2026-09-25T10:07:22.365Z"
 }
