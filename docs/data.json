@@ -1,11 +1,6 @@
 {
-  "offset": 535524567,
+  "offset": 535524568,
   "state": {
-    "319324257": {
-      "await": "damage",
-      "fileId": "AgACAgIAAxkBAAMaarZOIn2n7gaJ2fnzUvi-Ww2I7FIAAu4aaxuSx7FJF0uqP3_s-C8BAAMCAAN5AAM9BA",
-      "msgId": 26
-    },
     "2006381722": {
       "await": "nick"
     }
@@ -142,7 +137,17 @@
       "raw": "15.43T",
       "ts": 1790330838,
       "proof": "proofs/p_15.jpg"
+    },
+    {
+      "id": "28",
+      "tgId": "319324257",
+      "nick": "Murinelli",
+      "date": "2026-09-25",
+      "dmg": 16480000000000,
+      "raw": "16.48undefined",
+      "ts": 1790332544,
+      "proof": "proofs/p_28.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T10:34:20.628Z"
+  "updatedAt": "2026-09-25T10:35:45.379Z"
 }
