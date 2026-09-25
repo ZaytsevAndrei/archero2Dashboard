@@ -1,10 +1,6 @@
 {
-  "offset": 535524658,
-  "state": {
-    "473463802": {
-      "await": "nick"
-    }
-  },
+  "offset": 535524659,
+  "state": {},
   "users": {
     "176147068": {
       "nick": "Dragon",
@@ -47,6 +43,12 @@
       "joined": "2026-09-25T10:39:16.434Z",
       "tgUsername": "Vitaliy_Konkov",
       "first": "ViTaL"
+    },
+    "473463802": {
+      "nick": "slacker",
+      "joined": "2026-09-25T19:32:27.691Z",
+      "tgUsername": "slacker88",
+      "first": "Руслан"
     },
     "623045002": {
       "nick": "Accord",
@@ -413,5 +415,5 @@
       "proof": "proofs/p_192.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T19:23:03.650Z"
+  "updatedAt": "2026-09-25T19:32:27.694Z"
 }
