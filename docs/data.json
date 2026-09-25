@@ -1,10 +1,15 @@
 {
-  "offset": 535524583,
+  "offset": 535524584,
   "state": {
     "339274325": {
       "await": "damage",
       "fileId": "AgACAgIAAxkBAAM2arZPIwxlLOQOPXXHDeZ-n0NgK7cAAnQgaxvmErBJsCjtIyRrZM4BAAMCAAN5AAM9BA",
       "msgId": 54
+    },
+    "362568347": {
+      "await": "damage",
+      "fileId": "AgACAgIAAxkBAAM6arZPXrUS9EGZrktBl0uhsGSKL8QAAsYhaxs_jblJXi9FnwXbOgsBAAMCAAN3AAM9BA",
+      "msgId": 58
     }
   },
   "users": {
@@ -200,5 +205,5 @@
       "ts": 1790332688
     }
   ],
-  "updatedAt": "2026-09-25T10:39:16.435Z"
+  "updatedAt": "2026-09-25T10:40:04.781Z"
 }
