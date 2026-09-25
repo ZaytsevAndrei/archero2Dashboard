@@ -132,7 +132,7 @@ function handleCommand(msg) {
   if (c === 'start') {
     delete data.state[uid];
     if (user) {
-      send(msg.chat.id, `Ты уже зарегистрирован: ${user.nick}.\n\nПросто отправь скриншот рейтинга (фото), а следом — урон, например: 5.91T`);
+      send(msg.chat.id, `Ты уже зарегистрирован: ${user.nick}.\n\nОтправь скриншот рейтинга — урон я распознаю сам.`);
     } else {
       data.state[uid] = { await: 'nick' };
       send(msg.chat.id, 'Привет! Это бот календаря урона гильдии 🏹\n\nНапиши свой игровой ник (как в Archero 2):');
@@ -148,8 +148,8 @@ function handleCommand(msg) {
       '/stats — мои записи за 7 дней',
       '',
       'Как отметиться:',
-      '1) отправь скриншот рейтинга — я сам распознаю твой урон и попрошу подтвердить',
-      '2) если не распознал — пришли урон текстом: 5.91T или 209.77T',
+      'отправь скриншот рейтинга — я сам распознаю твой урон и попрошу подтвердить',
+      '(не разберу — попрошу ввести числом)',
       '',
       `Сайт: ${SITE_URL}`,
     ].join('\n'));
@@ -160,7 +160,7 @@ function handleCommand(msg) {
     if (!nick) { send(msg.chat.id, user ? `Твой ник: ${user.nick}. Сменить: /nick НовыйНик` : 'Сначала /start'); return; }
     if (nick.length > 24) { send(msg.chat.id, 'Ник слишком длинный (макс. 24 символа)'); return; }
     if (user) { user.nick = nick; send(msg.chat.id, `Ник изменён: ${nick}`); }
-    else { data.users[uid] = { nick, joined: new Date().toISOString() }; send(msg.chat.id, `Записал: ${nick}. Теперь отправь скриншот (фото) и урон!`); }
+    else { data.users[uid] = { nick, joined: new Date().toISOString() }; send(msg.chat.id, `Записал: ${nick}. Теперь отправь скриншот рейтинга — урон я определю сам.`); }
     return;
   }
   if (c === 'undo') {
@@ -210,7 +210,7 @@ async function processPhoto(uid, chatId, fileId, msgId) {
     });
   } else {
     data.state[uid] = { await: 'damage', fileId, msgId, ...(proof ? { proof } : {}) };
-    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nНапиши урон текстом, например: 5.91T');
+    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nПопробуй прислать скриншот ещё раз — чётче и покрупнее.\nНе выйдет — напиши урон числом: 5.91T');
   }
 }
 
@@ -229,7 +229,7 @@ async function handleCallback(q) {
       : 'Что-то сломалось, попробуй прислать урон текстом: 5.91T');
   } else if (q.data === 'ocr_no') {
     data.state[uid] = { await: 'damage', fileId: st.fileId, msgId: st.msgId, ...(st.proof ? { proof: st.proof } : {}) };
-    send(q.from.id, 'Ок, напиши урон текстом, например: 5.91T');
+    send(q.from.id, 'Ок, напиши урон числом: 5.91T');
   }
 }
 
@@ -246,7 +246,7 @@ async function handleMessage(msg) {
 
   // медиа → доказательство = скриншот/фото; видео отклоняем
   if (msg.video || msg.animation) {
-    send(msg.chat.id, 'Видео не принимаем 🙈 Пришли, пожалуйста, скриншот рейтинга картинкой — и следом урон, например: 5.91T');
+    send(msg.chat.id, 'Видео не принимаем 🙈 Пришли скриншот рейтинга картинкой — урон я распознаю сам.');
     return;
   }
   const fileId = msg.photo?.at(-1)?.file_id;
@@ -268,7 +268,7 @@ async function handleMessage(msg) {
       await processPhoto(uid, msg.chat.id, st.fileId, msg.message_id);
     } else {
       delete data.state[uid];
-      send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь просто отправь скриншот рейтинга — я сам распознаю урон и попрошу подтвердить.\nНе распознаю — попросу ввести текстом.`);
+      send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь просто отправляй скриншот рейтинга — я сам распознаю урон и попрошу подтвердить.`);
     }
     return;
   }
@@ -285,7 +285,7 @@ async function handleMessage(msg) {
     return;
   }
 
-  send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга или урон текстом: 5.91T\n/help — все команды');
+  send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга — урон я распознаю сам.\n/help — все команды');
 }
 
 // ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
