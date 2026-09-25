@@ -7,8 +7,8 @@
  * Логика бота:
  *   /start        → приветствие + запрос игрового ника
  *   ник текстом   → регистрация
- *   фото-скрин   → OCR: бот ищет строку с ником игрока и предлагает подтвердить урон
- *                  (кнопки «Записать» / «Ввести вручную»; не распознал — просит урон текстом)
+ *   фото-скрин   → OCR: бот ищет строку с ником игрока и сразу записывает урон
+ *                  (не распознал — просит скрин получше)
  *   «5.91T»       → запись урона за сегодня (повторная отправка за тот же день перезаписывает)
  *   /nick Имя     → сменить ник
  *   /undo         → удалить свою последнюю запись
@@ -154,8 +154,8 @@ function handleCommand(msg) {
       '/stats — мои записи за 7 дней',
       '',
       'Как отметиться:',
-      'отправь скриншот рейтинга — я сам распознаю твой урон и попрошу подтвердить',
-      '(не разберу — попрошу скрин получше)',
+      'отправь скриншот рейтинга — я сам распознаю и запишу твой урон',
+      '(не разберу — попрошу скрин получше; ошибся — /undo и новый скрин)',
       '',
       `Сайт: ${SITE_URL}`,
     ].join('\n'));
@@ -198,46 +198,36 @@ function recordEntry(uid, id, date, dmg, raw, ts, proof) {
   return true;
 }
 
-/* скачать скрин, распознать строку ника и предложить подтверждение */
-async function processPhoto(uid, chatId, fileId, msgId) {
+/* скачать скрин, распознать строку ника и сразу записать урон (без подтверждения) */
+async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
   const proof = await downloadProof(fileId, msgId);
   let ocr = null;
   if (proof) {
     try { ocr = await ocrOwnRow(path.join(ROOT, 'docs', proof), data.users[uid]?.nick); } catch (e) { console.error('ocr:', e.message); }
   }
-  if (ocr) {
-    data.state[uid] = { await: 'confirm', fileId, proof, dmg: ocr.dmg, raw: ocr.raw, msgId };
-    tg('sendMessage', {
-      chat_id: chatId,
-      text: `Скрин распознал 🔎\n${data.users[uid].nick} — ${fmtDmg(ocr.dmg)}\nЗаписать за сегодня?`,
-      reply_markup: { inline_keyboard: [
-        [{ text: '✅ Записать', callback_data: 'ocr_yes' }],
-      ] },
-    });
-  } else {
+  if (!ocr) {
     delete data.state[uid];
     send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nПришли скриншот ещё раз — чётче и покрупнее: весь экран рейтинга после боя, без обрезки краёв.');
+    return;
   }
+  const ts = msgDate || Math.floor(Date.now() / 1000);
+  const date = localDate(ts);
+  const ok = recordEntry(uid, msgId, date, ocr.dmg, ocr.raw, ts, proof);
+  delete data.state[uid];
+  send(chatId, ok
+    ? `✅ Записал: ${data.users[uid].nick} — ${fmtDmg(ocr.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`
+    : 'Что-то сломалось, попробуй прислать скрин ещё раз.');
 }
 
+/* кнопки подтверждения убраны; на нажатия старых «Записать» перенаправляем на новый сценарий */
 async function handleCallback(q) {
   if (!q.from || q.from.is_bot) return;
-  const uid = String(q.from.id);
-  const st = data.state[uid] || {};
   await tg('answerCallbackQuery', { callback_query_id: q.id });
-  if (st.await !== 'confirm') return;
-  if (q.data === 'ocr_yes') {
-    const date = localDate(q.message?.date || Math.floor(Date.now() / 1000));
-    const ok = recordEntry(uid, st.msgId || q.id, date, st.dmg, st.raw, q.message?.date || Math.floor(Date.now() / 1000), st.proof);
-    delete data.state[uid];
-    send(q.from.id, ok
-      ? `✅ Записал: ${fmtDmg(st.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`
-      : 'Что-то сломалось, попробуй прислать урон текстом: 5.91T');
-  } else if (q.data === 'ocr_no') {
-    // кнопка «Ввести вручную» удалена; на старых сообщениях — вежливо перенаправляем
-    delete data.state[uid];
-    send(q.from.id, 'Ручной ввод убрали — пришли скриншот получше, и я распознаю урон сам.');
-  }
+  delete data.state[String(q.from.id)];
+  tg('sendMessage', {
+    chat_id: q.from.id,
+    text: 'Кнопка больше не нужна — урон со скрина записываю сразу.\nЕсли значение не записалось или неверное: /undo и пришли скриншот заново.',
+  });
 }
 
 async function handleMessage(msg) {
@@ -276,7 +266,7 @@ async function handleMessage(msg) {
         return;
       }
     }
-    await processPhoto(uid, msg.chat.id, fileId, msg.message_id);
+    await processPhoto(uid, msg.chat.id, fileId, msg.message_id, msg.date);
     return;
   }
 
@@ -289,10 +279,10 @@ async function handleMessage(msg) {
     data.users[uid] = { nick: text, joined: new Date().toISOString(), ...meta };
     if (st.fileId) {
       // скрин уже прислан — распознаём сразу после регистрации
-      await processPhoto(uid, msg.chat.id, st.fileId, msg.message_id);
+      await processPhoto(uid, msg.chat.id, st.fileId, msg.message_id, msg.date);
     } else {
       delete data.state[uid];
-      send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь просто отправляй скриншот рейтинга — я сам распознаю урон и попрошу подтвердить.`);
+      send(msg.chat.id, `Отлично, ${text}! 🏹\n\nТеперь просто отправляй скриншот рейтинга — я сам распознаю и сразу запишу урон.`);
     }
     return;
   }
