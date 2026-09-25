@@ -1,10 +1,7 @@
 {
-  "offset": 535524644,
+  "offset": 535524645,
   "state": {
     "473463802": {
-      "await": "nick"
-    },
-    "997697638": {
       "await": "nick"
     }
   },
@@ -62,6 +59,12 @@
       "joined": "2026-09-25T13:58:23.893Z",
       "tgUsername": "CLAFTT",
       "first": "Вячеслав"
+    },
+    "997697638": {
+      "nick": "Donmaxone",
+      "joined": "2026-09-25T16:11:31.493Z",
+      "tgUsername": "max_n3ko",
+      "first": "Max"
     },
     "1932792747": {
       "nick": "ClownFiesta",
@@ -362,5 +365,5 @@
       "proof": "proofs/p_163.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T16:11:16.836Z"
+  "updatedAt": "2026-09-25T16:11:31.495Z"
 }
