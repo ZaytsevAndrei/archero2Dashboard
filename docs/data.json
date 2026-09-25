@@ -1,6 +1,15 @@
 {
-  "offset": 535524560,
-  "state": {},
+  "offset": 535524561,
+  "state": {
+    "176147068": {
+      "await": "confirm",
+      "fileId": "AgACAgIAAxkBAAMParZHzJq7ZyC8xLnWLDnlegjFYPAAAiocaxvBc7BJzbCG86iI3BQBAAMCAAN5AAM9BA",
+      "proof": "proofs/p_15.jpg",
+      "dmg": 15430000000000,
+      "raw": "15.43T",
+      "msgId": 15
+    }
+  },
   "users": {
     "176147068": {
       "nick": "Dragon",
@@ -119,5 +128,5 @@
       "demo": true
     }
   ],
-  "updatedAt": "2026-09-25T10:06:45.569Z"
+  "updatedAt": "2026-09-25T10:07:15.643Z"
 }
