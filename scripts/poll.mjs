@@ -23,6 +23,7 @@
  * в workflow; без них бот просто просит урон текстом.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { ocrOwnRow } from './ocr.mjs';
 
@@ -88,15 +89,17 @@ const fmtDmg = (dmg) => {
 // ---------- telegram api ----------
 let apiErrors = 0;
 let lastStatus = 0;
-async function tg(method, params = {}) {
+async function tg(method, params = {}, retries = 2) {
   let res;
   try {
     res = await fetch(`${API}/${method}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(params),
     });
   } catch (e) {
-    // сетевой сбой не должен ронять процесс (необработанный reject глотал бы апдейты без ответа)
+    // сетевой сбой не должен ронять процесс; у некоторых хостеров первое TLS-соединение
+    // к Telegram виснет (~10 c) и проходит только со второй попытки — поэтому повторяем
     apiErrors++; lastStatus = 0; console.error(`tg.${method} → network:`, e.message);
+    if (retries > 0) { await new Promise((r) => setTimeout(r, 1500)); return tg(method, params, retries - 1); }
     return null;
   }
   const j = await res.json().catch(() => ({}));
@@ -285,7 +288,7 @@ async function handleMessage(msg) {
   send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга или урон текстом: 5.91T\n/help — все команды');
 }
 
-// ---------- main ----------
+// ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
 async function main() {
   let processed = 0;
   let nullStreak = 0;
@@ -327,4 +330,59 @@ async function main() {
   else console.log('Новых сообщений нет, данные не менялись — коммита не будет.');
   if (apiErrors > 5) process.exitCode = 1;
 }
-main();
+
+/* закоммитить и запушить данные (непрерывный режим: сайт на Pages обновится сам) */
+function git(args) {
+  const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+  if (r.status !== 0) console.error(`git ${args.join(' ')} →`, (r.stderr || '').trim().slice(0, 200));
+  return r.status === 0;
+}
+let pushing = false;
+async function pushData() {
+  if (pushing) return;
+  pushing = true;
+  try {
+    git(['add', '-A', 'docs/']);
+    if (spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: ROOT }).status === 0) return; // нечего коммитить
+    if (!git(['commit', '-m', 'data: update from telegram bot'])) return;
+    for (let i = 0; i < 3 && !git(['push']); i++) git(['pull', '--rebase', 'origin', 'main']);
+  } finally { pushing = false; }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* непрерывный long polling: сообщения подхватываются за секунды, а не раз в 5 минут */
+async function loop() {
+  console.log(`[bot] непрерывный опрос запущен (${new Date().toISOString()}, TZ=${TZ})`);
+  for (;;) {
+    let updates = null;
+    try {
+      updates = await tg('getUpdates', { offset: data.offset, timeout: 50, allowed_updates: ['message', 'callback_query'] });
+    } catch (e) { console.error('[bot] getUpdates:', e.message); }
+    if (updates === null) {
+      if (lastStatus === 401 || lastStatus === 404 || lastStatus === 403) {
+        console.error('[bot] Telegram отклонил токен — останавливаюсь.'); process.exit(1);
+      }
+      console.log('[bot] сбой/конфликт getUpdates — снимаю webhook, повтор через 3 с');
+      await tg('deleteWebhook', { drop_pending_updates: false });
+      await sleep(3000);
+      continue;
+    }
+    if (!updates.length) continue;
+    let n = 0;
+    for (const u of updates) {
+      try {
+        if (u.message) await handleMessage(u.message);
+        else if (u.callback_query) await handleCallback(u.callback_query);
+        n++;
+      } catch (e) { console.error('[bot] update error:', u.update_id, e.message); }
+      data.offset = Math.max(data.offset, u.update_id + 1);
+      saveData();
+    }
+    console.log(`[bot] обработано ${n}, записей всего: ${data.entries.filter((e) => !e.demo).length}`);
+    await pushData();
+  }
+}
+
+if (process.env.BOT_LOOP) loop();
+else main();

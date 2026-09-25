@@ -7,13 +7,17 @@
 ## Как это работает
 
 ```
-Игрок → @Archero2Unity_bot (видео + «5.91T»)
-      → GitHub Actions каждые 5 мин: scripts/poll.mjs (getUpdates)
-      → коммитит docs/data.json (+ пруф-кадры в docs/proofs/)
+Игрок → @Archero2Unity_bot (скриншот рейтинга / «5.91T»)
+      → VPS (Debian): scripts/poll.mjs в режиме BOT_LOOP=1 — long polling,
+        ответы за секунды; OCR скриншотов (tesseract.js)
+      → бот сам коммитит docs/data.json в этот репозиторий (deploy key)
       → GitHub Pages показывает сайт
 ```
 
-Бесплатно: GitHub Actions (публичный репозиторий — безлимит) + GitHub Pages.
+Сайт — на GitHub Pages (бесплатно, CDN, не зависит от VPS). VPS отвечает только
+за бота: systemd-сервис `archero-bot` (перезапуск автоматически, после ребута тоже).
+GitHub Actions из `poll.yml` — страховка раз в сутки, если VPS молчит (очередь
+Telegram живёт 24 ч). Деплой на новый VPS: `scripts/setup-vps.md`.
 
 ## Бот — команды
 
