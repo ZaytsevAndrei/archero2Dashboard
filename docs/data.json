@@ -1,10 +1,6 @@
 {
-  "offset": 535524662,
-  "state": {
-    "641968840": {
-      "await": "nick"
-    }
-  },
+  "offset": 535524663,
+  "state": {},
   "users": {
     "176147068": {
       "nick": "Dragon",
@@ -59,6 +55,12 @@
       "joined": "2026-09-25T12:35:23.247Z",
       "tgUsername": "accord11",
       "first": "Gerasim"
+    },
+    "641968840": {
+      "nick": "PabLo",
+      "joined": "2026-09-25T20:17:01.483Z",
+      "tgUsername": "passha999",
+      "first": "Павел"
     },
     "708150494": {
       "nick": "Privedko",
@@ -419,5 +421,5 @@
       "proof": "proofs/p_192.jpg"
     }
   ],
-  "updatedAt": "2026-09-25T20:16:49.185Z"
+  "updatedAt": "2026-09-25T20:17:01.485Z"
 }
