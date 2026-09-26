@@ -31,19 +31,25 @@ function lev(a, b) {
   return prev[n];
 }
 
-/* токен-урон: «5.91T», «37.427»/«168.521»/«6.371» (T читается как 7/1), «6.37%»,
-   «94.З9Т» (кириллические З/О вместо 3/0), «700M», «12K» → { dmg, raw } */
+/* токен-урон: «5.91T», «698.98B»/«698.988» (B читается как 8), «698.98 В» склеивается
+   ниже, «37.427»/«6.371» (T читается как 7/1), «6.37%», «94.З9Т» (кириллические З/О
+   вместо 3/0), «700M», «12K», «41T» → { dmg, raw }. Голое «19,60» без суффикса НЕ
+   парсим: масштаб (B или T) неизвестен, а ошибка в 1000 раз хуже пропуска записи.
+   Нулевой урон («0т» из слова «от» после замены о→0, «0.00T») — тоже не запись */
 export function parseDamageToken(tok) {
   const s = String(tok).replace(/[Оо]/g, '0').replace(/[Зз]/g, '3');
-  let m = s.match(/^(\d{1,4})[.,](\d{2})(?:[TТт71%]|$)/); // 5.91T / 37.427 / 6.37% / 19,60
+  const mk = (num, mult, suf) => (num > 0 ? { dmg: Math.round(num * mult), raw: `${num}${suf}` } : null);
+  let m = s.match(/^(\d{1,4})[.,](\d{2})([TТт71%]|[BbВвБ8]|[MmМ]|[KkК])[.,]{0,2}$/);
   if (m) {
     const num = parseFloat(`${m[1]}.${m[2]}`);
-    return { dmg: Math.round(num * 1e12), raw: `${num}T` };
+    const cls = m[3];
+    const mult = /[BbВвБ8]/.test(cls) ? 1e9 : /[MmМ]/.test(cls) ? 1e6 : /[KkК]/.test(cls) ? 1e3 : 1e12;
+    return mk(num, mult, { 1e3: 'K', 1e6: 'M', 1e9: 'B', 1e12: 'T' }[mult]);
   }
-  m = s.match(/^(\d{1,4})([KkКMmМBbБ])(?![A-Za-z0-9])/); // 700M / 12K
+  m = s.match(/^(\d{1,4})([KkКMmМBbВвБTТт])(?![A-Za-z0-9])/); // 700M / 12K / 41T
   if (m) {
-    const mult = { K: 1e3, k: 1e3, К: 1e3, M: 1e6, m: 1e6, М: 1e6, B: 1e9, b: 1e9, Б: 1e9 }[m[2]];
-    return { dmg: Math.round(parseFloat(m[1]) * mult), raw: s };
+    const mult = { K: 1e3, k: 1e3, К: 1e3, M: 1e6, m: 1e6, М: 1e6, B: 1e9, b: 1e9, В: 1e9, в: 1e9, Б: 1e9, T: 1e12, Т: 1e12, т: 1e12 }[m[2]];
+    return mk(parseFloat(m[1]), mult, { 1e3: 'K', 1e6: 'M', 1e9: 'B', 1e12: 'T' }[mult]);
   }
   return null;
 }
@@ -100,7 +106,19 @@ export async function ocrOwnRow(imagePath, nick) {
     const nickRe = /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/;
     const isNick = (t) => { const c = clean(t); return nickRe.test(c) && lev(c.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34); };
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
-    const dmgOf = (toks) => toks.map(parseDamageToken).find(Boolean) || null;
+    /* «698.98 В» — суффикс иногда отрывается от числа пробелом: сначала пробуем
+       склеить число с коротким соседним токеном-суффиксом, потом токен как есть */
+    const dmgOf = (toks) => {
+      for (let i = 0; i < toks.length; i++) {
+        if (/^\d{1,4}[.,]\d{2}$/.test(toks[i]) && i + 1 < toks.length && /^[BbВвБ8TТт7MmМKkК1%]$/.test(toks[i + 1])) {
+          const glued = parseDamageToken(toks[i] + toks[i + 1]);
+          if (glued) return glued;
+        }
+        const d = parseDamageToken(toks[i]);
+        if (d) return d;
+      }
+      return null;
+    };
 
     /* полоса кадра ×5, распознанная в двух режимах сегментации (PSM 7 «одна
        строка» и PSM 11 «разреженный текст») → [{psm, lines, text}] */
@@ -139,7 +157,7 @@ export async function ocrOwnRow(imagePath, nick) {
       for (const { lines: slines, text } of await ocrStrip(x0, y0, y1)) {
         const toks = slines.flatMap((l) => l.words.map((w) => w.text));
         if (!toks.length && text) toks.push(...String(text).split(/\s+/).filter(Boolean));
-        const hit = toks.map(parseDamageToken).find(Boolean);
+        const hit = dmgOf(toks);
         if (hit) return hit;
       }
       return null;
