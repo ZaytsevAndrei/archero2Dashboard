@@ -154,13 +154,22 @@ export async function ocrOwnRow(imagePath, nick) {
       // строк уже нет, взять чужой урон нельзя
       const toEdge = y0 > height * 0.7;
       const y1 = toEdge ? height : Math.min(height, nickBottom + 36);
+      const hits = [];
       for (const { lines: slines, text } of await ocrStrip(x0, y0, y1)) {
         const toks = slines.flatMap((l) => l.words.map((w) => w.text));
         if (!toks.length && text) toks.push(...String(text).split(/\s+/).filter(Boolean));
         const hit = dmgOf(toks);
-        if (hit) return hit;
+        if (hit) hits.push(hit);
       }
-      return null;
+      if (!hits.length) return null;
+      if (hits.length > 1) {
+        // режимы сегментации спорят (PSM 7 «12.30T» читал как «32.307» — 1→3):
+        // верим прочитанному, которое подтверждается числом из основного прохода
+        const seen = new Set(lines.flatMap((l) => l.words.map((w) => parseDamageToken(w.text)).filter(Boolean).map((d) => d.dmg)));
+        const confirmed = hits.find((h) => seen.has(h.dmg));
+        if (confirmed) return confirmed;
+      }
+      return hits[0];
     }
 
     /* основной проход может убить ник (тёмная плашка, строка наполовину обрезана
