@@ -242,7 +242,7 @@ async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
   const ok = recordEntry(uid, msgId, date, ocr.dmg, ocr.raw, ts, proof);
   delete data.state[uid];
   send(chatId, ok
-    ? `✅ Записал: ${data.users[uid].nick} — ${fmtDmg(ocr.dmg)} за ${date.split('-').reverse().join('.')}\nДругое значение тем же днём — просто пришли ещё раз.`
+    ? `✅ Записал: ${data.users[uid].nick} — ${fmtDmg(ocr.dmg)} за ${date.split('-').reverse().join('.')}`
     : 'Что-то сломалось, попробуй прислать скрин ещё раз.');
 }
 
