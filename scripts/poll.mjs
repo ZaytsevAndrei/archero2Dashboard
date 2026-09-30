@@ -68,6 +68,15 @@ function saveData() {
 const localDate = (ts) =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date(ts * 1000)); // YYYY-MM-DD
 
+/* Игровой день длится с 03:00 до 03:00: урон, присланный с 00:00 до 02:59,
+ * относится к предыдущему календарному дню */
+const gameDate = (ts) => {
+  const hour = Number(new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).format(new Date(ts * 1000)));
+  if (hour >= 3) return localDate(ts);
+  const [y, m, d] = localDate(ts).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+};
+
 // ---------- damage parsing ----------
 // «5.91T», «5,91т», «209.77T», «700M», «12K», «5.91» (без суффикса = триллионы)
 function parseDamage(text) {
@@ -133,7 +142,7 @@ async function downloadProof(fileId, updateId) {
  * картинки тяжёлые — репозиторий не должен пухнуть. 7 дней считаем включительно:
  * сегодня + 6 дней назад; с 8-го дня пруфа нет */
 function pruneProofs() {
-  const keepFrom = localDate(Date.now() / 1000 - 6 * 86400);
+  const keepFrom = gameDate(Date.now() / 1000 - 6 * 86400);
   const keep = new Set();
   for (const e of data.entries) {
     if (!e.proof) continue;
@@ -206,7 +215,7 @@ function handleCommand(msg) {
   }
   if (c === 'stats') {
     if (!user) { send(msg.chat.id, 'Сначала /start'); return; }
-    const week = localDate(Date.now() / 1000 - 7 * 86400);
+    const week = gameDate(Date.now() / 1000 - 7 * 86400);
     const mine = data.entries.filter((e) => e.tgId === uid && e.date >= week).sort((a, b) => a.date.localeCompare(b.date));
     send(msg.chat.id, mine.length
       ? `Твои записи (${user.nick}):\n` + mine.map((e) => `${e.date}: ${e.raw || fmtDmg(e.dmg)}`).join('\n')
@@ -238,7 +247,7 @@ async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
     return;
   }
   const ts = msgDate || Math.floor(Date.now() / 1000);
-  const date = localDate(ts);
+  const date = gameDate(ts);
   const ok = recordEntry(uid, msgId, date, ocr.dmg, ocr.raw, ts, proof);
   delete data.state[uid];
   send(chatId, ok
@@ -392,8 +401,8 @@ async function loop() {
   console.log(`[bot] непрерывный опрос запущен (${new Date().toISOString()}, TZ=${TZ})`);
   let lastPruneDay = '';
   for (;;) {
-    // раз в сутки (по московской дате) — чистка пруфов старше 7 дней
-    const day = localDate(Date.now() / 1000);
+    // раз в сутки (по игровому дню, т.е. в 03:00) — чистка пруфов старше 7 дней
+    const day = gameDate(Date.now() / 1000);
     if (day !== lastPruneDay) {
       lastPruneDay = day;
       const before = snapshot();

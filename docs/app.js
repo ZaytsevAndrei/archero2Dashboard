@@ -19,7 +19,13 @@ const state = {
 /* ---------- утилиты ---------- */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const todayStr = () => new Intl.DateTimeFormat('sv-SE').format(new Date()); // YYYY-MM-DD локальной дате
+/* Игровой день длится с 03:00 до 03:00: до трёх утра «сегодня» — ещё вчерашний день */
+const todayStr = () => {
+  const d = new Date();
+  if (d.getHours() >= 3) return new Intl.DateTimeFormat('sv-SE').format(d);
+  d.setDate(d.getDate() - 1);
+  return new Intl.DateTimeFormat('sv-SE').format(d);
+}; // YYYY-MM-DD
 
 function fmtDmg(dmg) {
   const units = [[1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
@@ -211,7 +217,7 @@ function renderLeaderboard(nicks, byNick, map) {
 /* ---------- события ---------- */
 $('prev-month').onclick = () => { const { y, m } = state.month; state.month = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; render(); };
 $('next-month').onclick = () => { const { y, m } = state.month; state.month = m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; render(); };
-$('today-btn').onclick = () => { const d = new Date(); state.month = { y: d.getFullYear(), m: d.getMonth() }; state.selectedDate = todayStr(); render(); };
+$('today-btn').onclick = () => { const [y, mm] = todayStr().split('-').map(Number); state.month = { y, m: mm - 1 }; state.selectedDate = todayStr(); render(); };
 
 /* клик по дате → детали дня под календарём */
 $('calendar').addEventListener('click', (ev) => {
