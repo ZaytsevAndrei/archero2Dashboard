@@ -102,10 +102,22 @@ export async function ocrOwnRow(imagePath, nick) {
       words.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
     }
     const lines = groupLines(words);
+    if (process.env.OCR_DEBUG === '2') for (const l of lines) console.error(`[ocr] y=${l.y}: ${l.words.map((w) => `${w.text}@${w.x}`).join(' | ')}`);
     const clean = (t) => t.replace(/^[^A-Za-zА-Яа-я0-9]+|[^A-Za-zА-Яа-я0-9]+$/g, ''); // срезать мусор вида «+¥DonMaxone»
     const nickRe = /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/;
     const isNick = (t) => { const c = clean(t); return nickRe.test(c) && lev(c.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34); };
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
+    /* урон игрока не бывает левее его ника: в списке он правее ника в той же
+       строке, на подиуме — под именем. Числа левее ника в той же полосе — чужие
+       (урон «БАЗУКИ» с центра подиума топ-1, значения левого соседа) и игроку
+       не засчитываются */
+    const X_TOL = 40; // допуск в координатах основного прохода (масштаб ×3)
+    const toksAfter = (l, nw) => {
+      if (!l) return [];
+      const from = l.words.indexOf(nw) + 1; // своя строка: токены после ника
+      return l.words.filter((w, i) => i >= from && w.x >= nw.x - X_TOL).map((w) => w.text);
+    };
+    const toksRight = (l, nw) => (l ? l.words.filter((w) => w.x >= nw.x - X_TOL).map((w) => w.text) : []);
     /* «698.98 В» — суффикс иногда отрывается от числа пробелом: сначала пробуем
        склеить число с коротким соседним токеном-суффиксом, потом токен как есть */
     const dmgOf = (toks) => {
@@ -181,8 +193,9 @@ export async function ocrOwnRow(imagePath, nick) {
       const y1 = y0 > height * 0.7 ? height : Math.min(height, anchorBottom + 36);
       for (const { lines: slines } of await ocrStrip(0, y0, y1)) {
         for (let i = 0; i < slines.length; i++) {
-          if (!slines[i].words.some((w) => isNick(w.text))) continue;
-          const hit = dmgOf(toksOf(slines[i])) || dmgOf(toksOf(slines[i + 1])) || dmgOf(toksOf(slines[i - 1]));
+          const nw = slines[i].words.find((w) => isNick(w.text));
+          if (!nw) continue;
+          const hit = dmgOf(toksAfter(slines[i], nw)) || dmgOf(toksRight(slines[i + 1], nw)) || dmgOf(toksRight(slines[i - 1], nw));
           if (hit) return hit;
         }
       }
@@ -196,8 +209,9 @@ export async function ocrOwnRow(imagePath, nick) {
     for (let i = 0; i < lines.length; i++) {
       const nickWord = lines[i].words.find((w) => isNick(w.text));
       if (!nickWord) continue;
-      const d = dmgOf(toksOf(lines[i])) || dmgOf(toksOf(lines[i + 1])) || await reocrRow(nickWord) || dmgOf(toksOf(lines[i - 1]));
+      const d = dmgOf(toksAfter(lines[i], nickWord)) || dmgOf(toksRight(lines[i + 1], nickWord)) || await reocrRow(nickWord) || dmgOf(toksRight(lines[i - 1], nickWord));
       if (d) rows.push({ d, y: lines[i].y });
+      if (process.env.OCR_DEBUG) console.error(`[ocr] nick-строка y=${lines[i].y}: «${toksOf(lines[i]).join(' ')}» → ${d ? d.raw : 'нет урона'}`);
     }
     if (!rows.length) {
       for (const l of lines) {
@@ -206,6 +220,7 @@ export async function ocrOwnRow(imagePath, nick) {
       }
     }
     if (!rows.length) return null;
+    if (process.env.OCR_DEBUG) console.error(`[ocr] строки-кандидаты: ${rows.map((r) => `${r.d.raw}@y${r.y}`).join(', ')}`);
     // игра закрепляет собственную строку игрока внизу списка — при нескольких
     // совпадениях берём её, а не максимум: рядом с пьедесталом топ-3 лежит счётчик
     // общего урона гильдии, который легко принять за урон игрока. Но закреплённая
