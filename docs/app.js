@@ -49,7 +49,7 @@ const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
 /* heat-цвет: зелёный → жёлтый → красный относительно максимума */
 function heatColor(v, max) {
   if (!max) return 'var(--cell-empty)';
-  const r = Math.sqrt(v / max); // sqrt чтобы «средние» значения тоже светились
+  const r = Math.min(1, Math.sqrt(v / max)); // sqrt чтобы «средние» значения тоже светились
   const hue = 150 - 150 * r;
   return `hsl(${hue}, 65%, ${18 + 14 * r}%)`;
 }
@@ -103,6 +103,18 @@ function dayTotals(map) {
   return days;
 }
 
+/* суммы урона по всем датам (без фильтра месяца) — для сетки календаря,
+ * включая «хвосты» из соседних месяцев */
+function totalsByDate(map) {
+  const days = new Map(); // date -> {sum, count}
+  for (const [, e] of map) {
+    const cur = days.get(e.date) || { sum: 0, count: 0 };
+    cur.sum += e.dmg; cur.count++;
+    days.set(e.date, cur);
+  }
+  return days;
+}
+
 /* ---------- рендер ---------- */
 function render() {
   const t = todayStr();
@@ -110,9 +122,7 @@ function render() {
     const [y, mm] = t.split('-').map(Number);
     state.month = { y, m: mm - 1 };
   }
-  if (!state.selectedDate || !state.selectedDate.startsWith(`${state.month.y}-${pad(state.month.m + 1)}`)) {
-    state.selectedDate = t; // при смене месяца — сброс на сегодня
-  }
+  if (!state.selectedDate) state.selectedDate = t; // выбор дня меняет клик по сетке, не перерисовка
   const { y, m } = state.month;
   $('month-label').textContent = `${MONTHS_RU[m]} ${y}`;
 
@@ -150,25 +160,26 @@ function render() {
   const monthSum = [...days.values()].reduce((s, d) => s + d.sum, 0);
   $('stat-month').textContent = monthSum ? fmtDmg(monthSum) : '—';
 
-  renderCalendar(days, t);
+  renderCalendar(totalsByDate(map), t);
   renderDayPanel(map);
   renderLeaderboard(nicks, byNick, map);
 }
 
-/* один общий календарь месяца: ячейка = день, значение = сумма урона за день */
-function renderCalendar(days, t) {
+/* один общий календарь месяца: ячейка = день, значение = сумма урона за день.
+ * Края сетки — дни соседних месяцев (класс out, приглушены): в октябре,
+ * начавшемся с четверга, первые три ячейки показывают урон за конец сентября */
+function renderCalendar(daysAll, t) {
   const { y, m } = state.month;
   const shift = (new Date(y, m, 1).getDay() + 6) % 7; // Пн = 0
   const dim = daysInMonth(y, m);
   const prefix = `${y}-${pad(m + 1)}-`;
-  const maxDay = Math.max(0, ...[...days.values()].map((d) => d.sum));
+  // рекорд месяца — только по дням самого месяца: соседние не искажают шкалу цвета
+  let maxDay = 0;
+  for (const [d, v] of daysAll) if (d.startsWith(prefix)) maxDay = Math.max(maxDay, v.sum);
 
-  const cells = [];
-  for (let i = 0; i < shift; i++) cells.push('<span class="cal-cell off"></span>');
-  for (let d = 1; d <= dim; d++) {
-    const ds = prefix + pad(d);
-    const day = days.get(ds);
-    let cls = 'cal-cell';
+  const cell = (ds, d, out) => {
+    const day = daysAll.get(ds);
+    let cls = 'cal-cell' + (out ? ' out' : '');
     let style = '';
     let val = '';
     if (ds > t) cls += ' future';
@@ -179,8 +190,23 @@ function renderCalendar(days, t) {
       style = ` style="background:${heatColor(day.sum, maxDay)}"`;
       val = `<span class="cal-val">${fmtShort(day.sum)}</span><span class="cal-sub">${day.count} 🏹</span>`;
     }
-    cells.push(`<button type="button" class="${cls}"${style} data-date="${ds}" title="${ds}"><span class="cal-num">${d}</span>${val}</button>`);
+    return `<button type="button" class="${cls}"${style} data-date="${ds}" title="${ds}"><span class="cal-num">${d}</span>${val}</button>`;
+  };
+
+  const cells = [];
+  // начало: последние дни предыдущего месяца
+  const py = m === 0 ? y - 1 : y;
+  const pdim = daysInMonth(py, m === 0 ? 11 : m - 1);
+  for (let i = shift; i > 0; i--) {
+    const d = pdim - i + 1;
+    cells.push(cell(`${py}-${pad(m === 0 ? 12 : m)}-${pad(d)}`, d, true));
   }
+  for (let d = 1; d <= dim; d++) cells.push(cell(prefix + pad(d), d, false));
+  // конец: первые дни следующего месяца (добиваем ряд до воскресенья)
+  const tail = (7 - ((shift + dim) % 7)) % 7;
+  const ny = m === 11 ? y + 1 : y;
+  for (let d = 1; d <= tail; d++) cells.push(cell(`${ny}-${pad(m === 11 ? 1 : m + 2)}-${pad(d)}`, d, true));
+
   $('calendar').innerHTML =
     `<div class="cal-weekdays">${WEEKDAYS.map((w, i) => `<span class="${i > 4 ? 'wend' : ''}">${w}</span>`).join('')}</div>` +
     `<div class="cal-grid">${cells.join('')}</div>`;
@@ -241,8 +267,18 @@ function renderLeaderboard(nicks, byNick, map) {
 
 
 /* ---------- события ---------- */
-$('prev-month').onclick = () => { const { y, m } = state.month; state.month = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; render(); };
-$('next-month').onclick = () => { const { y, m } = state.month; state.month = m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; render(); };
+/* смена месяца: выбранная дата сохраняется, если попадает в новый месяц
+ * (в т.ч. день соседнего месяца с края сетки), иначе сброс на сегодня */
+function shiftMonth(delta) {
+  const { y, m } = state.month;
+  state.month = delta < 0
+    ? (m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 })
+    : (m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 });
+  if (!state.selectedDate?.startsWith(`${state.month.y}-${pad(state.month.m + 1)}`)) state.selectedDate = todayStr();
+  render();
+}
+$('prev-month').onclick = () => shiftMonth(-1);
+$('next-month').onclick = () => shiftMonth(1);
 $('today-btn').onclick = () => { const [y, mm] = todayStr().split('-').map(Number); state.month = { y, m: mm - 1 }; state.selectedDate = todayStr(); render(); };
 
 /* вкладка клана: фильтруем календарь, карточки, день и рейтинг */

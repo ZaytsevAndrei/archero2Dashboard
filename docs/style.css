@@ -158,6 +158,10 @@ header {
   cursor: pointer;
 }
 .cal-cell.off { background: transparent; pointer-events: none; }
+/* дни соседних месяцев на краях сетки: приглушённые, но с уроном и кликабельные */
+.cal-cell.out { opacity: .55; }
+.cal-cell.out:hover { opacity: .85; }
+.cal-cell.out.today, .cal-cell.out.selected { opacity: 1; }
 .cal-cell.future { opacity: .35; cursor: default; }
 .cal-cell.today { outline: 1.5px solid rgba(245, 185, 66, .8); }
 .cal-cell.selected { outline: 2px solid var(--accent); box-shadow: 0 0 10px rgba(245, 185, 66, .35); }
