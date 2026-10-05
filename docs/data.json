@@ -1,9 +1,6 @@
 {
-  "offset": 535524790,
+  "offset": 535524791,
   "state": {
-    "176147068": {
-      "await": "clan"
-    },
     "5611677447": {
       "await": "nick"
     }
@@ -14,7 +11,9 @@
       "joined": "2026-09-24T13:51:22.877Z",
       "tgUsername": "katoteshikuza",
       "first": "Андрей",
-      "lang": "ru"
+      "lang": "ru",
+      "clan": "unity",
+      "clanCheck": "2026-10-05"
     },
     "274630626": {
       "nick": "ZvereK17",
@@ -1298,5 +1297,5 @@
     }
   ],
   "bugs": [],
-  "updatedAt": "2026-10-05T21:44:34.695Z"
+  "updatedAt": "2026-10-05T21:44:54.957Z"
 }
