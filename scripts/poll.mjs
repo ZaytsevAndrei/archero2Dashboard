@@ -18,6 +18,9 @@
  *   /lang         → язык бота (авто по языку клиента Telegram: ru / en)
  *   /undo         → удалить свою последнюю запись
  *   /stats        → мои записи за 7 дней
+ *   /bug текст    → жалоба: текстом или пересылкой сообщения бота с ошибкой;
+ *                  попадает в data.bugs (уходит в git вместе с данными),
+ *                  владельцу летит уведомление (OWNER_CHAT_ID)
  *
  * Язык реплик определяется автоматически по from.language_code (клиент Telegram),
  * запоминается в users[uid].lang при первом контакте и меняется через /lang.
@@ -27,6 +30,7 @@
  *   TG_TOKEN  — токен бота (секрет TG_BOT_TOKEN). Если пуст — используется встроенный
  *               запутанный fallback (только для MVP; задайте секрет и перегенерируйте токен).
  *   SITE_URL  — ссылка на сайт, упомянутая в /help (по умолчанию GitHub Pages этого репо).
+ *   OWNER_CHAT_ID — кому слать уведомления о /bug (по умолчанию chat_id владельца, Dragon).
  *
  * Зависимости для OCR (jimp, tesseract.js) опциональны — ставятся через npm install
  * в workflow; без них бот просто просит урон текстом.
@@ -42,6 +46,8 @@ const DATA_FILE = path.join(ROOT, 'docs', 'data.json');
 const PROOFS_DIR = path.join(ROOT, 'docs', 'proofs');
 const TZ = process.env.TZ_NAME || 'Europe/Moscow';
 const SITE_URL = process.env.SITE_URL || 'https://zaytsevandrei.github.io/archero2Dashboard/';
+/* кому уходит уведомление о /bug (владелец — Dragon); переопределяется env-ом */
+const OWNER_CHAT_ID = process.env.OWNER_CHAT_ID || '176147068';
 
 const FALLBACK_TOKEN = (() => {
   const a = 'a2NUamhqQnp6NnQwOWJK';
@@ -57,7 +63,7 @@ if (!process.env.TG_TOKEN) {
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // ---------- data ----------
-const emptyData = () => ({ offset: 0, state: {}, users: {}, entries: [], updatedAt: null });
+const emptyData = () => ({ offset: 0, state: {}, users: {}, entries: [], bugs: [], updatedAt: null });
 let data;
 if (existsSync(DATA_FILE)) {
   try { data = { ...emptyData(), ...JSON.parse(readFileSync(DATA_FILE, 'utf8')) }; }
@@ -65,7 +71,7 @@ if (existsSync(DATA_FILE)) {
 } else { data = emptyData(); }
 
 // снимок значимых полей: если не изменились — файл не трогаем (иначе коммит каждые 5 минут)
-const DATA_KEYS = ['offset', 'state', 'users', 'entries'];
+const DATA_KEYS = ['offset', 'state', 'users', 'entries', 'bugs'];
 const snapshot = () => JSON.stringify(DATA_KEYS.map((k) => data[k]));
 const initialSnapshot = snapshot();
 
@@ -224,12 +230,51 @@ function askLang(chatId) {
   });
 }
 
+// ---------- /bug: жалобы ----------
+/* кого переслали (forward_origin, Bot API 7.0+): имя автора, скрытый пользователь или чат */
+const fwdSender = (o) => {
+  if (!o) return null;
+  if (o.type === 'user') {
+    const name = [o.sender_user?.first_name, o.sender_user?.last_name].filter(Boolean).join(' ');
+    return name || (o.sender_user?.username ? '@' + o.sender_user.username : null);
+  }
+  if (o.type === 'hidden_user') return o.sender_user_name ? `${o.sender_user_name} (скрытый)` : 'скрытый пользователь';
+  if (o.type === 'chat' || o.type === 'channel') return o.chat?.title || null;
+  return null;
+};
+
+/* жалобу — в data.bugs (коммитится вместе с данными) + уведомление владельцу */
+function saveBug(uid, msg, text) {
+  const u = data.users[uid];
+  const fwd = fwdSender(msg.forward_origin || null);
+  const bug = {
+    id: String(msg.message_id),
+    tgId: uid,
+    nick: u?.nick || null,
+    tgUsername: msg.from?.username || null,
+    text: text.slice(0, 1000),
+    ts: msg.date || Math.floor(Date.now() / 1000),
+  };
+  data.bugs.push(bug);
+  const when = new Intl.DateTimeFormat('ru-RU', {
+    timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(bug.ts * 1000));
+  const who = [bug.nick, bug.tgUsername ? '@' + bug.tgUsername : null, `id${bug.tgId}`].filter(Boolean).join(' · ');
+  tg('sendMessage', {
+    chat_id: OWNER_CHAT_ID,
+    text: `🐞 Жалоба (${when})\nОт: ${who}${fwd ? `\nПереслано от: ${fwd}` : ''}\n\n${bug.text}`,
+  });
+}
+
 function handleCommand(msg) {
   const [cmd, ...rest] = msg.text.slice(1).split(/\s+/);
   const c = cmd.split('@')[0].toLowerCase();
   const uid = String(msg.from.id);
   const user = data.users[uid];
   const lang = pickLang(uid, msg.from);
+  // любая команда, кроме самого /bug, снимает ожидание жалобы — иначе текст после
+  // неё (например, ответ на /stats) улетел бы в лог жалоб
+  if (c !== 'bug' && data.state[uid]?.await === 'bug') delete data.state[uid];
   if (c === 'start') {
     delete data.state[uid];
     if (user) {
@@ -293,6 +338,19 @@ function handleCommand(msg) {
     send(msg.chat.id, mine.length
       ? `${head}\n` + mine.map((e) => `${e.date}: ${e.raw || fmtDmg(e.dmg)}`).join('\n')
       : t(lang, 'statsEmpty'));
+    return;
+  }
+  if (c === 'bug') {
+    // с текстом сразу — принимаем одним сообщением; без текста — ждём описание
+    // или пересланное сообщение бота с ошибкой (state await:'bug')
+    const bugText = rest.join(' ').trim();
+    if (bugText) {
+      saveBug(uid, msg, bugText);
+      send(msg.chat.id, t(lang, 'bugThanks'));
+    } else {
+      data.state[uid] = { await: 'bug' };
+      send(msg.chat.id, t(lang, 'bugAsk'));
+    }
     return;
   }
   send(msg.chat.id, t(lang, 'unknownCommand'));
@@ -401,6 +459,20 @@ async function handleMessage(msg) {
     return;
   }
   const fileId = msg.photo?.at(-1)?.file_id;
+
+  // /bug ждёт текст жалобы или пересланное сообщение; скрин в этом состоянии —
+  // обычная запись урона (ожидание снимаем, скрин не теряем)
+  if (st.await === 'bug') {
+    const bugText = msg.text?.trim();
+    if (bugText) {
+      saveBug(uid, msg, bugText);
+      delete data.state[uid];
+      send(msg.chat.id, t(lang, 'bugThanks'));
+      return;
+    }
+    if (!fileId) { send(msg.chat.id, t(lang, 'bugAsk')); return; }
+    delete data.state[uid];
+  }
 
   // игроки разошлись по разным кланам: с CLAN_ASK_FROM каждый игрок при первом
   // фото уточняет клан один раз; скрин удерживаем и распознаём сразу после ответа

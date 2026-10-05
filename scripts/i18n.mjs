@@ -43,8 +43,8 @@ export const MESSAGES = {
   },
   /* краткий список команд — прикладывается к сообщению о записанном уроне */
   commandsList: {
-    ru: 'Команды бота:\n/stats — мои записи за 7 дней\n/undo — удалить последнюю запись\n/nick НовыйНик — сменить ник\n/clan — указать или сменить клан\n/lang — язык бота\n/help — справка',
-    en: 'Bot commands:\n/stats — my entries for the last 7 days\n/undo — delete my last entry\n/nick NewNick — change nickname\n/clan — set or change clan\n/lang — bot language\n/help — full reference',
+    ru: 'Команды бота:\n/stats — мои записи за 7 дней\n/undo — удалить последнюю запись\n/nick НовыйНик — сменить ник\n/clan — указать или сменить клан\n/lang — язык бота\n/bug — сообщить о проблеме\n/help — справка',
+    en: 'Bot commands:\n/stats — my entries for the last 7 days\n/undo — delete my last entry\n/nick NewNick — change nickname\n/clan — set or change clan\n/lang — bot language\n/bug — report a problem\n/help — full reference',
   },
   askNick: {
     ru: 'Сначала напиши свой игровой ник (как в Archero 2):',
@@ -73,6 +73,15 @@ export const MESSAGES = {
   notRegistered: {
     ru: 'Сначала /start',
     en: 'Run /start first',
+  },
+  /* /bug без текста — ждём описание или пересланное сообщение бота с ошибкой */
+  bugAsk: {
+    ru: 'Опиши проблему одним сообщением: что произошло и что ожидал.\nИли просто перешли сюда моё сообщение с ошибкой.',
+    en: 'Describe the problem in one message: what happened and what you expected.\nOr just forward my message with the error here.',
+  },
+  bugThanks: {
+    ru: '🐞 Принято, жалоба отправлена разработчику. Спасибо!',
+    en: '🐞 Got it — the report has been sent to the developer. Thanks!',
   },
   clanChanged: {
     ru: 'Клан изменён: {clan} ✅ (прошлые записи остаются за прежним кланом)',
@@ -171,6 +180,7 @@ export const MESSAGES = {
       '/lang — язык бота (русский / english)',
       '/undo — удалить свою последнюю запись',
       '/stats — мои записи за 7 дней',
+      '/bug описание — сообщить о проблеме (или /bug и переслать моё сообщение с ошибкой)',
       '',
       'Как отметиться:',
       'отправь скриншот рейтинга — я сам распознаю и запишу твой урон',
@@ -186,6 +196,7 @@ export const MESSAGES = {
       '/lang — bot language (Russian / English)',
       '/undo — delete my last entry',
       '/stats — my entries for the last 7 days',
+      '/bug description — report a problem (or /bug and forward my message with the error)',
       '',
       'How to report:',
       "send a rating screenshot — I'll recognize and record your damage myself",
