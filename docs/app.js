@@ -1,5 +1,6 @@
 /* Календарь урона — Archero 2, кланы Unity и Unity2.
- * Один календарь месяца; клик по дате — детали дня под календарём.
+ * Две вкладки: «Сегодня» (урон за сегодня + рейтинг месяца) и «Календарь»
+ * (месяц с уроном по кланам разными цветами; клик по дате — детали дня).
  * Данные: data.json (коммитится ботом). Без фреймворков.
  * Языки интерфейса: ru / en / vi — автораспознавание по браузеру,
  * переключатель в шапке, выбор помнится в localStorage. */
@@ -42,12 +43,14 @@ const I18N = {
     prevMonth: 'Предыдущий месяц',
     nextMonth: 'Следующий месяц',
     today: 'Сегодня',
+    viewToday: 'Сегодня',
+    viewCalendar: 'Календарь',
     tabAll: 'Все кланы',
     cardPlayers: 'участников',
     cardToday: 'урона сегодня',
     cardMonth: 'сумма за месяц',
     hCalendar: 'Календарь урона',
-    hintCalendar: 'Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.',
+    hintCalendar: 'Ячейка — урон за день, цвет — клан: золотой Unity, фиолетовый Unity2 (чем ярче, тем больше урон). В виде «Все кланы» ячейка с уроном нескольких кланов делится между ними по доле урона. Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.',
     hLeaderboard: 'Рейтинг за месяц',
     hHowto: 'Как попасть в календарь',
     howto1: 'Открой бота',
@@ -72,12 +75,14 @@ const I18N = {
     prevMonth: 'Previous month',
     nextMonth: 'Next month',
     today: 'Today',
+    viewToday: 'Today',
+    viewCalendar: 'Calendar',
     tabAll: 'All clans',
     cardPlayers: 'participants',
     cardToday: 'damage today',
     cardMonth: 'month total',
     hCalendar: 'Damage calendar',
-    hintCalendar: "A cell is the day's total damage (of the selected clan or all clans); the color goes from green (low) to red (month record). Dimmed days at the edges belong to the neighboring months. Click a date to see each player's damage for that day below. 🧾 — screenshot proof.",
+    hintCalendar: "A cell is the day's damage, colored by clan: gold for Unity, purple for Unity2 (the brighter, the more damage). In the “All clans” view a cell with several clans' damage is split between them by damage share. Dimmed days at the edges belong to the neighboring months. Click a date to see each player's damage for that day below. 🧾 — screenshot proof.",
     hLeaderboard: 'Monthly leaderboard',
     hHowto: 'How to get on the calendar',
     howto1: 'Open the bot',
@@ -102,12 +107,14 @@ const I18N = {
     prevMonth: 'Tháng trước',
     nextMonth: 'Tháng sau',
     today: 'Hôm nay',
+    viewToday: 'Hôm nay',
+    viewCalendar: 'Lịch',
     tabAll: 'Tất cả các bang',
     cardPlayers: 'người tham gia',
     cardToday: 'sát thương hôm nay',
     cardMonth: 'tổng trong tháng',
     hCalendar: 'Lịch sát thương',
-    hintCalendar: 'Mỗi ô là tổng sát thương trong ngày (của bang đã chọn hoặc tất cả); màu từ xanh lá (thấp) đến đỏ (kỷ lục tháng). Những ngày mờ ở rìa là của tháng lân cận. Bấm vào ngày để xem sát thương của từng người chơi. 🧾 — ảnh bằng chứng.',
+    hintCalendar: 'Mỗi ô là sát thương trong ngày, màu theo bang: vàng — Unity, tím — Unity2 (càng sáng càng cao). Ở chế độ «Tất cả các bang», ô có sát thương của nhiều bang được chia theo tỷ lệ của từng bang. Những ngày mờ ở rìa là của tháng lân cận. Bấm vào ngày để xem sát thương của từng người chơi. 🧾 — ảnh bằng chứng.',
     hLeaderboard: 'Bảng xếp hạng tháng',
     hHowto: 'Cách ghi danh vào lịch',
     howto1: 'Mở bot',
@@ -125,13 +132,18 @@ const I18N = {
 };
 
 const CLANS = { unity: 'Unity', unity2: 'Unity2' };
-const clanOf = (e) => e.clan || 'unity'; // записи до появления Unity2 — все из Unity
+const clanOf = (e) => e.clan || 'unity2'; // записи до разделения кланов — все из Unity2
+/* цвета кланов (rgb-триплеты): Unity — золото, Unity2 — фиолетовый; такими же
+ * подсвечены значения в ячейках календаря и бейджи кланов */
+const CLAN_COLORS = { unity: '245,185,66', unity2: '179,157,255' };
+const clanColor = (c) => CLAN_COLORS[c] || '232,235,242';
 
 const state = {
   raw: { entries: [], users: {}, updatedAt: null },
   month: null,            // {y, m} — просматриваемый месяц
   selectedDate: null,     // выбранная дата 'YYYY-MM-DD' (по умолчанию сегодня)
   clan: 'all',            // вкладка клана: 'all' | 'unity' | 'unity2'
+  view: 'today',          // вкладка раздела: 'today' | 'calendar'
   lang: null,             // язык интерфейса: 'ru' | 'en' | 'vi'
 };
 
@@ -144,6 +156,15 @@ function detectLang() {
   const prefs = (navigator.languages || [navigator.language]).map((s) => String(s).slice(0, 2).toLowerCase());
   for (const p of prefs) if (I18N[p]) return p;
   return 'ru';
+}
+
+/* вкладка раздела: сохранённый выбор, по умолчанию «Сегодня» */
+function detectView() {
+  try {
+    const v = localStorage.getItem('view');
+    if (v === 'today' || v === 'calendar') return v;
+  } catch (e) { /* приватный режим */ }
+  return 'today';
 }
 const L = (key) => I18N[state.lang]?.[key] ?? I18N.ru[key] ?? key;
 const cal = () => CAL[state.lang] || CAL.ru;
@@ -198,14 +219,6 @@ function fmtShort(dmg) { // компактно для ячеек: 209.77T → 21
 }
 const pad = (n) => String(n).padStart(2, '0');
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
-
-/* heat-цвет: зелёный → жёлтый → красный относительно максимума */
-function heatColor(v, max) {
-  if (!max) return 'var(--cell-empty)';
-  const r = Math.min(1, Math.sqrt(v / max)); // sqrt чтобы «средние» значения тоже светились
-  const hue = 150 - 150 * r;
-  return `hsl(${hue}, 65%, ${18 + 14 * r}%)`;
-}
 
 /* цвет полосы рейтинга по месту: топ-25% зелёные, середина жёлтая, низ-25% красные */
 function rankColor(idx, total) {
@@ -272,13 +285,17 @@ function dayTotals(map) {
   return days;
 }
 
-/* суммы урона по всем датам (без фильтра месяца) — для сетки календаря,
- * включая «хвосты» из соседних месяцев */
+/* суммы урона по всем датам (без фильтра месяца) с разбивкой по кланам —
+ * для сетки календаря, включая «хвосты» из соседних месяцев */
 function totalsByDate(map) {
-  const days = new Map(); // date -> {sum, count}
+  const days = new Map(); // date -> {sum, count, clans: Map(clan -> {sum, count})}
   for (const [, e] of map) {
-    const cur = days.get(e.date) || { sum: 0, count: 0 };
+    const cur = days.get(e.date) || { sum: 0, count: 0, clans: new Map() };
     cur.sum += e.dmg; cur.count++;
+    const c = clanOf(e);
+    const cc = cur.clans.get(c) || { sum: 0, count: 0 };
+    cc.sum += e.dmg; cc.count++;
+    cur.clans.set(c, cc);
     days.set(e.date, cur);
   }
   return days;
@@ -330,21 +347,30 @@ function render() {
   $('stat-month').textContent = monthSum ? fmtDmg(monthSum) : '—';
 
   renderCalendar(totalsByDate(map), t);
-  renderDayPanel(map);
+  fillDayPanel('today', t, map);                 // вкладка «Сегодня» — всегда сегодняшний день
+  fillDayPanel('day', state.selectedDate, map);  // вкладка «Календарь» — выбранный день
   renderLeaderboard(nicks, byNick, map);
 }
 
-/* один общий календарь месяца: ячейка = день, значение = сумма урона за день.
- * Края сетки — дни соседних месяцев (класс out, приглушены): в октябре,
- * начавшемся с четверга, первые три ячейки показывают урон за конец сентября */
+/* один общий календарь месяца: ячейка = день, урон — по кланам разными цветами
+ * (Unity — золотой, Unity2 — фиолетовый), яркость фона растёт с уроном; шкала —
+ * рекорд месяца этого же клана. В виде «Все кланы» ячейка с уроном нескольких
+ * кланов делится градиентом по доле урона, значения подписаны цветом клана
+ * (Unity сверху). Края сетки — дни соседних месяцев (класс out, приглушены) */
 function renderCalendar(daysAll, t) {
   const { y, m } = state.month;
   const shift = (new Date(y, m, 1).getDay() + 6) % 7; // Пн = 0
   const dim = daysInMonth(y, m);
   const prefix = `${y}-${pad(m + 1)}-`;
-  // рекорд месяца — только по дням самого месяца: соседние не искажают шкалу цвета
-  let maxDay = 0;
-  for (const [d, v] of daysAll) if (d.startsWith(prefix)) maxDay = Math.max(maxDay, v.sum);
+  // рекорд месяца по каждому клану отдельно — яркость клана не зависит от другого;
+  // считаем только по дням самого месяца: соседние не искажают шкалу
+  const maxByClan = new Map();
+  for (const [d, v] of daysAll) {
+    if (!d.startsWith(prefix)) continue;
+    for (const [c, s] of v.clans) maxByClan.set(c, Math.max(maxByClan.get(c) || 0, s.sum));
+  }
+  const bg = (c, sum) =>
+    `rgba(${clanColor(c)},${(maxByClan.get(c) ? 0.16 + 0.5 * Math.sqrt(sum / maxByClan.get(c)) : 0.3).toFixed(2)})`;
 
   const cell = (ds, d, out) => {
     const day = daysAll.get(ds);
@@ -356,8 +382,25 @@ function renderCalendar(daysAll, t) {
     if (ds === state.selectedDate) cls += ' selected';
     if (day) {
       cls += ' has';
-      style = ` style="background:${heatColor(day.sum, maxDay)}"`;
-      val = `<span class="cal-val">${fmtShort(day.sum)}</span><span class="cal-sub">${day.count} 🏹</span>`;
+      const clans = Object.keys(CLANS).filter((c) => day.clans.has(c));
+      if (clans.length === 1) {
+        const c = clans[0];
+        const s = day.clans.get(c).sum;
+        style = ` style="background:${bg(c, s)}"`;
+        val = `<span class="cal-val" style="color:rgb(${clanColor(c)})">${fmtShort(s)}</span><span class="cal-sub">${day.count} 🏹</span>`;
+      } else {
+        const total = clans.reduce((sum, c) => sum + day.clans.get(c).sum, 0);
+        let acc = 0;
+        const stops = clans.map((c) => {
+          const from = acc;
+          acc += day.clans.get(c).sum / total;
+          return `${bg(c, day.clans.get(c).sum)} ${(from * 100).toFixed(1)}% ${(acc * 100).toFixed(1)}%`;
+        });
+        style = ` style="background:linear-gradient(180deg,${stops.join(',')})"`;
+        val = clans
+          .map((c) => `<span class="cal-val" style="color:rgb(${clanColor(c)})">${fmtShort(day.clans.get(c).sum)}</span>`)
+          .join('');
+      }
     }
     return `<button type="button" class="${cls}"${style} data-date="${ds}" title="${ds}"><span class="cal-num">${d}</span>${val}</button>`;
   };
@@ -388,15 +431,14 @@ function clanChip(clan) {
   return `<span class="clan-chip ${clan === 'unity2' ? 'c-unity2' : 'c-unity'}" title="${CLANS[clan]}">${clan === 'unity2' ? 'U2' : 'U'}</span>`;
 }
 
-/* панель дня под календарём: урон каждого приславшего за выбранную дату */
-function renderDayPanel(map) {
-  const ds = state.selectedDate;
+/* панель дня: урон каждого приславшего за дату. prefix = 'today' (вкладка
+ * «Сегодня», всегда сегодняшний день) или 'day' (вкладка «Календаря», выбранный) */
+function fillDayPanel(prefix, ds, map) {
   const d = Number(ds.slice(8));
   const mon = Number(ds.slice(5, 7)) - 1;
   const wd = (new Date(Number(ds.slice(0, 4)), mon, d).getDay() + 6) % 7;
-  const rows = [...map.entries()]
-    .filter(([k, e]) => e.date === ds)
-    .map(([k, e]) => e)
+  const rows = [...map.values()]
+    .filter((e) => e.date === ds)
     .sort((a, b) => b.dmg - a.dmg);
   const total = rows.reduce((s, e) => s + e.dmg, 0);
 
@@ -411,9 +453,9 @@ function renderDayPanel(map) {
       </li>`).join('')
     : `<li class="today-none">${L('dayNone')}</li>`;
 
-  $('day-title').textContent = dayTitle(d, mon, wd);
-  $('day-list').innerHTML = list;
-  $('day-total').textContent = rows.length
+  $(`${prefix}-title`).textContent = dayTitle(d, mon, wd);
+  $(`${prefix}-list`).innerHTML = list;
+  $(`${prefix}-total`).textContent = rows.length
     ? `Σ ${fmtDmg(total)} ${L('from')} ${rows.length} ${participantsWord(rows.length)}` : '';
 }
 
@@ -451,6 +493,20 @@ $('prev-month').onclick = () => shiftMonth(-1);
 $('next-month').onclick = () => shiftMonth(1);
 $('today-btn').onclick = () => { const [y, mm] = todayStr().split('-').map(Number); state.month = { y, m: mm - 1 }; state.selectedDate = todayStr(); render(); };
 
+/* вкладка раздела «Сегодня»/«Календарь»: показываем нужную, выбор помним */
+$('view-tabs').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button.view-tab');
+  if (!btn || btn.dataset.view === state.view) return;
+  state.view = btn.dataset.view;
+  try { localStorage.setItem('view', state.view); } catch (e) { /* приватный режим */ }
+  syncView();
+});
+function syncView() {
+  document.querySelectorAll('#view-tabs .view-tab').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+  $('view-today').hidden = state.view !== 'today';
+  $('view-calendar').hidden = state.view !== 'calendar';
+}
+
 /* вкладка клана: фильтруем календарь, карточки, день и рейтинг */
 $('clan-tabs').addEventListener('click', (ev) => {
   const btn = ev.target.closest('button.clan-tab');
@@ -467,11 +523,11 @@ $('calendar').addEventListener('click', (ev) => {
   state.selectedDate = cell.dataset.date;
   document.querySelectorAll('.cal-cell.selected').forEach((c) => c.classList.remove('selected'));
   cell.classList.add('selected');
-  renderDayPanel(cellMap());
+  fillDayPanel('day', state.selectedDate, cellMap());
 });
 
-/* кнопка 🧾 в списке дня → попап со скриншотом */
-$('day-list').addEventListener('click', (ev) => {
+/* кнопка 🧾 в списках дня (обе вкладки) → попап со скриншотом */
+const openProof = (ev) => {
   const btn = ev.target.closest('button.proof-btn');
   if (!btn) return;
   const e = [...state.raw.entries]
@@ -484,7 +540,9 @@ $('day-list').addEventListener('click', (ev) => {
   if (e.proof) { img.src = e.proof; img.hidden = false; $('popup-noproof').hidden = true; }
   else { img.hidden = true; img.removeAttribute('src'); $('popup-noproof').hidden = false; }
   $('cell-popup').hidden = false;
-});
+};
+$('today-list').addEventListener('click', openProof);
+$('day-list').addEventListener('click', openProof);
 $('popup-close').onclick = () => { $('cell-popup').hidden = true; };
 $('cell-popup').addEventListener('click', (ev) => { if (ev.target === $('cell-popup')) $('cell-popup').hidden = true; });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('cell-popup').hidden = true; });
@@ -502,6 +560,8 @@ $('lang-switch').addEventListener('click', (ev) => {
 
 /* старт + автообновление раз в минуту */
 state.lang = detectLang();
+state.view = detectView();
 applyI18n();
+syncView();
 loadData();
 setInterval(loadData, 60_000);

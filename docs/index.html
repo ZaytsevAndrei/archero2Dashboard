@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unity &amp; Unity2 — Календарь урона · Archero 2</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <header>
@@ -20,11 +20,9 @@
 </header>
 
 <main>
-  <nav class="month-nav">
-    <button id="prev-month" title="Предыдущий месяц" data-i18n-title="prevMonth">‹</button>
-    <div id="month-label">—</div>
-    <button id="next-month" title="Следующий месяц" data-i18n-title="nextMonth">›</button>
-    <button id="today-btn" class="ghost" data-i18n="today">Сегодня</button>
+  <nav class="view-tabs" id="view-tabs">
+    <button type="button" class="view-tab active" data-view="today" data-i18n="viewToday">Сегодня</button>
+    <button type="button" class="view-tab" data-view="calendar" data-i18n="viewCalendar">Календарь</button>
   </nav>
 
   <nav class="clan-tabs" id="clan-tabs">
@@ -33,38 +31,61 @@
     <button type="button" class="clan-tab" data-clan="unity2">Unity2</button>
   </nav>
 
-  <div class="cards">
-    <div class="card"><span id="stat-players">–</span><label data-i18n="cardPlayers">участников</label></div>
-    <div class="card"><span id="stat-today">–</span><label data-i18n="cardToday">урона сегодня</label></div>
-    <div class="card"><span id="stat-month">–</span><label data-i18n="cardMonth">сумма за месяц</label></div>
+  <!-- вкладка «Сегодня»: урон за сегодня, рейтинг месяца, инструкция -->
+  <div id="view-today">
+    <div class="cards">
+      <div class="card"><span id="stat-players">–</span><label data-i18n="cardPlayers">участников</label></div>
+      <div class="card"><span id="stat-today">–</span><label data-i18n="cardToday">урона сегодня</label></div>
+      <div class="card"><span id="stat-month">–</span><label data-i18n="cardMonth">сумма за месяц</label></div>
+    </div>
+
+    <section class="panel today-panel">
+      <h2 id="today-title">—</h2>
+      <ol id="today-list" class="leaderboard day-list"></ol>
+      <div id="today-total" class="today-total"></div>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="hLeaderboard">Рейтинг за месяц</h2>
+      <ol id="leaderboard" class="leaderboard"></ol>
+    </section>
+
+    <section class="panel">
+      <h2 data-i18n="hHowto">Как попасть в календарь</h2>
+      <ol class="howto">
+        <li><span data-i18n="howto1">Открой бота</span> <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
+        <li data-i18n="howto2">Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2</li>
+        <li data-i18n="howto3">Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его</li>
+      </ol>
+      <p class="hint" data-i18n="hintBot">Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.</p>
+    </section>
   </div>
 
-  <section class="panel">
-    <h2 data-i18n="hCalendar">Календарь урона</h2>
-    <div id="calendar"></div>
-    <p class="hint" data-i18n="hintCalendar">Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
-  </section>
+  <!-- вкладка «Календарь»: месяц + детали выбранного дня -->
+  <div id="view-calendar" hidden>
+    <nav class="month-nav">
+      <button id="prev-month" title="Предыдущий месяц" data-i18n-title="prevMonth">‹</button>
+      <div id="month-label">—</div>
+      <button id="next-month" title="Следующий месяц" data-i18n-title="nextMonth">›</button>
+      <button id="today-btn" class="ghost" data-i18n="today">Сегодня</button>
+    </nav>
 
-  <section class="panel today-panel">
-    <h2 id="day-title">—</h2>
-    <ol id="day-list" class="leaderboard day-list"></ol>
-    <div id="day-total" class="today-total"></div>
-  </section>
+    <section class="panel">
+      <h2 data-i18n="hCalendar">Календарь урона</h2>
+      <div class="cal-legend">
+        <span><i style="background:rgba(245,185,66,.75)"></i>Unity</span>
+        <span><i style="background:rgba(179,157,255,.75)"></i>Unity2</span>
+      </div>
+      <div id="calendar"></div>
+      <p class="hint" data-i18n="hintCalendar">Ячейка — урон за день, цвет — клан: золотой Unity, фиолетовый Unity2 (чем ярче, тем больше урон). В виде «Все кланы» ячейка с уроном нескольких кланов делится между ними по доле урона. Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
+    </section>
 
-  <section class="panel">
-    <h2 data-i18n="hLeaderboard">Рейтинг за месяц</h2>
-    <ol id="leaderboard" class="leaderboard"></ol>
-  </section>
-
-  <section class="panel">
-    <h2 data-i18n="hHowto">Как попасть в календарь</h2>
-    <ol class="howto">
-      <li><span data-i18n="howto1">Открой бота</span> <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
-      <li data-i18n="howto2">Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2</li>
-      <li data-i18n="howto3">Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его</li>
-    </ol>
-    <p class="hint" data-i18n="hintBot">Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.</p>
-  </section>
+    <section class="panel today-panel">
+      <h2 id="day-title">—</h2>
+      <ol id="day-list" class="leaderboard day-list"></ol>
+      <div id="day-total" class="today-total"></div>
+    </section>
+  </div>
 </main>
 
 <div id="cell-popup" class="modal" hidden>
@@ -77,6 +98,6 @@
   </div>
 </div>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

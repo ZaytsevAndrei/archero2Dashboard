@@ -32,6 +32,20 @@ export const MESSAGES = {
     ru: 'У нас теперь два клана 🏹 Из какого ты?',
     en: 'We now have two clans 🏹 Which one are you in?',
   },
+  /* перепроверка клана при первом фото с CLAN_ASK_FROM: игроки разошлись по кланам */
+  askClanRe: {
+    ru: 'Игроки теперь в разных кланах 🏹 Уточни, в каком ты сейчас:',
+    en: 'Players are in different clans now 🏹 Tell me which one you are in:',
+  },
+  clanConfirm: {
+    ru: 'Принято: клан {clan} ✅',
+    en: 'Got it: clan {clan} ✅',
+  },
+  /* краткий список команд — прикладывается к сообщению о записанном уроне */
+  commandsList: {
+    ru: 'Команды бота:\n/stats — мои записи за 7 дней\n/undo — удалить последнюю запись\n/nick НовыйНик — сменить ник\n/clan — указать или сменить клан\n/lang — язык бота\n/help — справка',
+    en: 'Bot commands:\n/stats — my entries for the last 7 days\n/undo — delete my last entry\n/nick NewNick — change nickname\n/clan — set or change clan\n/lang — bot language\n/help — full reference',
+  },
   askNick: {
     ru: 'Сначала напиши свой игровой ник (как в Archero 2):',
     en: 'First, send me your in-game nickname (as in Archero 2):',
