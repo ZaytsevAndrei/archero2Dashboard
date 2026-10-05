@@ -10,10 +10,14 @@ const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const WEEKDAYS_FULL = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
 
+const CLANS = { unity: 'Unity', unity2: 'Unity2' };
+const clanOf = (e) => e.clan || 'unity'; // записи до появления Unity2 — все из Unity
+
 const state = {
   raw: { entries: [], users: {}, updatedAt: null },
   month: null,            // {y, m} — просматриваемый месяц
   selectedDate: null,     // выбранная дата 'YYYY-MM-DD' (по умолчанию сегодня)
+  clan: 'all',            // вкладка клана: 'all' | 'unity' | 'unity2'
 };
 
 /* ---------- утилиты ---------- */
@@ -74,10 +78,11 @@ async function loadData() {
 }
 
 /* одна запись на ник+день (максимальная); демо-записи не показываем */
-function cellMap() {
+function cellMap(clan = state.clan) {
   const map = new Map(); // key nick|date -> entry
   for (const e of state.raw.entries) {
     if (!e.date || e.demo) continue;
+    if (clan !== 'all' && clanOf(e) !== clan) continue;
     const k = `${e.nick}|${e.date}`;
     const prev = map.get(k);
     if (!prev || e.dmg > prev.dmg) map.set(k, e);
@@ -114,15 +119,29 @@ function render() {
   const map = cellMap();
   const days = dayTotals(map);
 
-  // игроки месяца, отсортированные по сумме (для карточек и рейтинга)
+  // игроки месяца, отсортированные по сумме (для карточек и рейтинга);
+  // клан игрока = клан его последней записи (переход между кланами редкость)
   const byNick = new Map();
   for (const [k, e] of map) {
     if (!e.date.startsWith(`${y}-${pad(m + 1)}`)) continue;
-    const cur = byNick.get(e.nick) || { total: 0, days: 0 };
+    const cur = byNick.get(e.nick) || { total: 0, days: 0, clan: null, last: '' };
     cur.total += e.dmg; cur.days++;
+    if (!cur.last || e.date >= cur.last) { cur.clan = clanOf(e); cur.last = e.date; }
     byNick.set(e.nick, cur);
   }
   const nicks = [...byNick.keys()].sort((a, b) => byNick.get(b).total - byNick.get(a).total);
+
+  // вкладки кланов: подпись с числом участников месяца (по всем кланам, без фильтра)
+  const perClan = { all: new Set(), unity: new Set(), unity2: new Set() };
+  for (const [, e] of cellMap('all')) {
+    if (!e.date.startsWith(`${y}-${pad(m + 1)}`)) continue;
+    perClan.all.add(e.nick);
+    perClan[clanOf(e)]?.add(e.nick);
+  }
+  document.querySelectorAll('#clan-tabs .clan-tab').forEach((b) => {
+    const base = b.dataset.clan === 'all' ? 'Все кланы' : CLANS[b.dataset.clan];
+    b.textContent = perClan[b.dataset.clan].size ? `${base} · ${perClan[b.dataset.clan].size}` : base;
+  });
 
   // карточки
   $('stat-players').textContent = nicks.length;
@@ -167,6 +186,13 @@ function renderCalendar(days, t) {
     `<div class="cal-grid">${cells.join('')}</div>`;
 }
 
+/* бейдж клана у ника — только в общем виде (на вкладке клана он не нужен);
+ * U = Unity, U2 = Unity2 */
+function clanChip(clan) {
+  if (state.clan !== 'all' || !clan) return '';
+  return `<span class="clan-chip ${clan === 'unity2' ? 'c-unity2' : 'c-unity'}" title="${CLANS[clan]}">${clan === 'unity2' ? 'U2' : 'U'}</span>`;
+}
+
 /* панель дня под календарём: урон каждого приславшего за выбранную дату */
 function renderDayPanel(map) {
   const ds = state.selectedDate;
@@ -183,7 +209,7 @@ function renderDayPanel(map) {
     ? rows.map((e, i) => `
       <li>
         <span class="rank">${i + 1}</span>
-        <span class="name">${esc(e.nick)}</span>
+        <span class="name">${esc(e.nick)}${clanChip(clanOf(e))}</span>
         ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="Открыть скриншот">🧾</button>` : ''}
         <span class="total">${fmtDmg(e.dmg)}</span>
         <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%;background:${rankColor(i, rows.length)}"></i></span>
@@ -205,7 +231,7 @@ function renderLeaderboard(nicks, byNick, map) {
     const w = Math.max(4, Math.round((st.total / best) * 100));
     return `<li>
       <span class="rank">${i + 1}</span>
-      <span class="name">${esc(nick)}</span>
+      <span class="name">${esc(nick)}${clanChip(st.clan)}</span>
       <span class="total">${fmtDmg(st.total)}</span>
       <span class="bar"><i style="width:${w}%;background:${rankColor(i, shown.length)}"></i></span>
       <span class="meta">${st.days} дн. · лучший день ${bestDay ? fmtDmg(bestDay.dmg) : '—'}</span>
@@ -218,6 +244,15 @@ function renderLeaderboard(nicks, byNick, map) {
 $('prev-month').onclick = () => { const { y, m } = state.month; state.month = m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; render(); };
 $('next-month').onclick = () => { const { y, m } = state.month; state.month = m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; render(); };
 $('today-btn').onclick = () => { const [y, mm] = todayStr().split('-').map(Number); state.month = { y, m: mm - 1 }; state.selectedDate = todayStr(); render(); };
+
+/* вкладка клана: фильтруем календарь, карточки, день и рейтинг */
+$('clan-tabs').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button.clan-tab');
+  if (!btn || btn.dataset.clan === state.clan) return;
+  state.clan = btn.dataset.clan;
+  document.querySelectorAll('#clan-tabs .clan-tab').forEach((b) => b.classList.toggle('active', b === btn));
+  render();
+});
 
 /* клик по дате → детали дня под календарём */
 $('calendar').addEventListener('click', (ev) => {

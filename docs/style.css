@@ -56,6 +56,38 @@ header {
 .month-nav button.ghost { font-size: 13.5px; color: var(--muted); }
 #month-label { font-size: 17px; font-weight: 600; min-width: 170px; text-align: center; }
 
+/* ---------- вкладки кланов ---------- */
+.clan-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.clan-tab {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 16px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.clan-tab:hover { border-color: var(--accent); color: var(--text); }
+.clan-tab.active { border-color: var(--accent); color: var(--accent); background: var(--panel-2); }
+
+/* бейдж клана у ника: U — Unity (золото), U2 — Unity2 (фиолетовый) */
+.clan-chip {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  vertical-align: 1px;
+  letter-spacing: .4px;
+}
+.clan-chip.c-unity { color: var(--accent); border-color: rgba(245, 185, 66, .45); background: rgba(245, 185, 66, .08); }
+.clan-chip.c-unity2 { color: #b39dff; border-color: rgba(179, 157, 255, .45); background: rgba(179, 157, 255, .1); }
+
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -245,4 +277,5 @@ header {
   .cal-cell .cal-sub { font-size: 9px; }
   .cal-cell .cal-num { font-size: 10px; }
   .cal-weekdays span { font-size: 10px; }
+  .clan-tab { font-size: 12.5px; padding: 5px 12px; }
 }

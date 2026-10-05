@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Unity — Календарь урона · Archero 2</title>
+<title>Unity &amp; Unity2 — Календарь урона · Archero 2</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 <header>
-  <div class="brand">🏹 <b>UNITY</b> · Календарь урона</div>
+  <div class="brand">🏹 Календарь урона · <b>Unity</b> &amp; <b>Unity2</b></div>
   <div class="sub">Вторжение монстров · Archero 2</div>
   <div class="updated" id="updated">загрузка…</div>
 </header>
@@ -22,6 +22,12 @@
     <button id="today-btn" class="ghost">Сегодня</button>
   </nav>
 
+  <nav class="clan-tabs" id="clan-tabs">
+    <button type="button" class="clan-tab active" data-clan="all">Все кланы</button>
+    <button type="button" class="clan-tab" data-clan="unity">Unity</button>
+    <button type="button" class="clan-tab" data-clan="unity2">Unity2</button>
+  </nav>
+
   <div class="cards">
     <div class="card"><span id="stat-players">–</span><label>участников</label></div>
     <div class="card"><span id="stat-today">–</span><label>урона сегодня</label></div>
@@ -31,7 +37,7 @@
   <section class="panel">
     <h2>Календарь урона</h2>
     <div id="calendar"></div>
-    <p class="hint">Ячейка — сумма урона гильдии за день, цвет — от зелёного (мало) к красному (рекорд месяца). Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
+    <p class="hint">Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
   </section>
 
   <section class="panel today-panel">
@@ -49,8 +55,8 @@
     <h2>Как попасть в календарь</h2>
     <ol class="howto">
       <li>Открой бота <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
-      <li>Отправь <b>/start</b> и напиши свой игровой ник</li>
-      <li>Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и попросит подтвердить</li>
+      <li>Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2</li>
+      <li>Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его</li>
     </ol>
     <p class="hint">Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.</p>
   </section>
@@ -66,6 +72,6 @@
   </div>
 </div>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>
