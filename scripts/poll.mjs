@@ -13,8 +13,13 @@
  *   «5.91T»       → запись урона за сегодня (повторная отправка за тот же день перезаписывает)
  *   /nick Имя     → сменить ник
  *   /clan         → указать/сменить клан (Unity / Unity2)
+ *   /lang         → язык бота (авто по языку клиента Telegram: ru / en)
  *   /undo         → удалить свою последнюю запись
  *   /stats        → мои записи за 7 дней
+ *
+ * Язык реплик определяется автоматически по from.language_code (клиент Telegram),
+ * запоминается в users[uid].lang при первом контакте и меняется через /lang.
+ * Строки и словарь ru/en — в scripts/i18n.mjs.
  *
  * env:
  *   TG_TOKEN  — токен бота (секрет TG_BOT_TOKEN). Если пуст — используется встроенный
@@ -28,6 +33,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { ocrOwnRow } from './ocr.mjs';
+import { normLang, t } from './i18n.mjs';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const DATA_FILE = path.join(ROOT, 'docs', 'data.json');
@@ -75,6 +81,10 @@ const CLANS = { unity: 'Unity', unity2: 'Unity2' };
 /* до появления второго клана (Unity2) все записи были из Unity — помечаем их,
  * чтобы сайт мог делить урон по кланам; сохранится при первом же апдейте */
 for (const e of data.entries) if (!e.clan) e.clan = 'unity';
+
+/* язык игрока: сохранённый, иначе — язык клиента Telegram (кириллические → ru,
+ * остальные → en), иначе русский */
+const pickLang = (uid, from) => data.users[uid]?.lang || normLang(from?.language_code) || 'ru';
 
 /* Игровой день длится с 03:00 до 03:00: урон, присланный с 00:00 до 02:59,
  * относится к предыдущему календарному дню */
@@ -175,14 +185,29 @@ function pruneProofs() {
 
 // ---------- handlers ----------
 /* вопрос о клане (кнопки): при регистрации спрашиваем один раз, /clan — сменить */
-function askClan(chatId) {
+function askClan(chatId, lang) {
   tg('sendMessage', {
     chat_id: chatId,
-    text: 'У нас теперь два клана 🏹 Из какого ты?',
+    text: t(lang, 'askClan'),
     reply_markup: {
       inline_keyboard: [[
         { text: 'UNITY', callback_data: 'clan:unity' },
         { text: 'UNITY2', callback_data: 'clan:unity2' },
+      ]],
+    },
+  });
+}
+
+/* смена языка кнопкой (/lang); только для зарегистрированных — иначе выбор
+ * затёрся бы автоопределением при регистрации */
+function askLang(chatId) {
+  tg('sendMessage', {
+    chat_id: chatId,
+    text: t('ru', 'askLang'),
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '🇷🇺 Русский', callback_data: 'lang:ru' },
+        { text: '🇬🇧 English', callback_data: 'lang:en' },
       ]],
     },
   });
@@ -193,77 +218,73 @@ function handleCommand(msg) {
   const c = cmd.split('@')[0].toLowerCase();
   const uid = String(msg.from.id);
   const user = data.users[uid];
+  const lang = pickLang(uid, msg.from);
   if (c === 'start') {
     delete data.state[uid];
     if (user) {
       if (!user.clan) {
         // зарегистрирован до появления второго клана — уточняем клан один раз
         data.state[uid] = { await: 'clan' };
-        send(msg.chat.id, `С возвращением, ${user.nick}!`);
-        askClan(msg.chat.id);
+        send(msg.chat.id, t(lang, 'welcomeBack', { nick: user.nick }));
+        askClan(msg.chat.id, lang);
       } else {
-        send(msg.chat.id, `Ты уже зарегистрирован: ${user.nick} (клан ${CLANS[user.clan]}).\n\nОтправь скриншот рейтинга — урон я распознаю сам.`);
+        send(msg.chat.id, t(lang, 'alreadyRegistered', { nick: user.nick, clan: CLANS[user.clan] }));
       }
     } else {
       data.state[uid] = { await: 'nick' };
-      send(msg.chat.id, 'Привет! Это бот календаря урона кланов Unity и Unity2 🏹\n\nНапиши свой игровой ник (как в Archero 2):');
+      send(msg.chat.id, t(lang, 'startNew'));
     }
     return;
   }
   if (c === 'help') {
-    send(msg.chat.id, [
-      '🏹 Календарь урона — команды:',
-      '/start — регистрация (игровой ник + клан)',
-      '/nick НовыйНик — сменить ник',
-      '/clan — указать или сменить клан (Unity / Unity2)',
-      '/undo — удалить свою последнюю запись',
-      '/stats — мои записи за 7 дней',
-      '',
-      'Как отметиться:',
-      'отправь скриншот рейтинга — я сам распознаю и запишу твой урон',
-      '(не разберу — попрошу скрин получше; ошибся — /undo и новый скрин)',
-      '',
-      `Сайт: ${SITE_URL}`,
-    ].join('\n'));
+    send(msg.chat.id, t(lang, 'help', { url: SITE_URL }));
     return;
   }
   if (c === 'nick') {
     const nick = rest.join(' ').trim();
-    if (!nick) { send(msg.chat.id, user ? `Твой ник: ${user.nick}. Сменить: /nick НовыйНик` : 'Сначала /start'); return; }
-    if (nick.length > 24) { send(msg.chat.id, 'Ник слишком длинный (макс. 24 символа)'); return; }
-    if (user) { user.nick = nick; send(msg.chat.id, `Ник изменён: ${nick}`); }
+    if (!nick) { send(msg.chat.id, user ? t(lang, 'nickShow', { nick: user.nick }) : t(lang, 'notRegistered')); return; }
+    if (nick.length > 24) { send(msg.chat.id, t(lang, 'nickTooLong')); return; }
+    if (user) { user.nick = nick; send(msg.chat.id, t(lang, 'nickChanged', { nick })); }
     else {
-      data.users[uid] = { nick, joined: new Date().toISOString() };
+      data.users[uid] = { nick, joined: new Date().toISOString(), lang };
       data.state[uid] = { await: 'clan' };
-      send(msg.chat.id, `Записал: ${nick}.`);
-      askClan(msg.chat.id);
+      send(msg.chat.id, t(lang, 'nickSaved', { nick }));
+      askClan(msg.chat.id, lang);
     }
     return;
   }
   if (c === 'clan') {
-    if (!user) { send(msg.chat.id, 'Сначала /start'); return; }
+    if (!user) { send(msg.chat.id, t(lang, 'notRegistered')); return; }
     data.state[uid] = { await: 'clan' };
-    askClan(msg.chat.id);
+    askClan(msg.chat.id, lang);
+    return;
+  }
+  if (c === 'lang') {
+    if (!user) { send(msg.chat.id, t(lang, 'notRegistered')); return; }
+    askLang(msg.chat.id);
     return;
   }
   if (c === 'undo') {
     const mine = data.entries.filter((e) => e.tgId === uid && !e.demo);
-    if (!mine.length) { send(msg.chat.id, 'У тебя пока нет записей.'); return; }
+    if (!mine.length) { send(msg.chat.id, t(lang, 'undoNone')); return; }
     const last = mine.reduce((a, b) => (a.ts >= b.ts ? a : b));
     data.entries = data.entries.filter((e) => e !== last);
-    send(msg.chat.id, `Удалил: ${last.raw || fmtDmg(last.dmg)} за ${last.date}`);
+    send(msg.chat.id, t(lang, 'undoDone', { raw: last.raw || fmtDmg(last.dmg), date: last.date }));
     return;
   }
   if (c === 'stats') {
-    if (!user) { send(msg.chat.id, 'Сначала /start'); return; }
+    if (!user) { send(msg.chat.id, t(lang, 'notRegistered')); return; }
     const week = gameDate(Date.now() / 1000 - 7 * 86400);
     const mine = data.entries.filter((e) => e.tgId === uid && e.date >= week).sort((a, b) => a.date.localeCompare(b.date));
+    const head = user.clan
+      ? t(lang, 'statsHead', { nick: user.nick, clan: CLANS[user.clan] })
+      : t(lang, 'statsHeadPlain', { nick: user.nick });
     send(msg.chat.id, mine.length
-      ? `Твои записи (${user.nick}${user.clan ? `, клан ${CLANS[user.clan]}` : ''}):\n` + mine.map((e) => `${e.date}: ${e.raw || fmtDmg(e.dmg)}`).join('\n')
-      : 'За последние 7 дней записей нет.');
+      ? `${head}\n` + mine.map((e) => `${e.date}: ${e.raw || fmtDmg(e.dmg)}`).join('\n')
+      : t(lang, 'statsEmpty'));
     return;
   }
-  send(msg.chat.id, 'Не знаю такую команду. /help — список команд');
+  send(msg.chat.id, t(lang, 'unknownCommand'));
 }
 
 /* записать урон за дату (повторная отправка за тот же день перезаписывает) */
@@ -277,6 +298,7 @@ function recordEntry(uid, id, date, dmg, raw, ts, proof) {
 
 /* скачать скрин, распознать строку ника и сразу записать урон (без подтверждения) */
 async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
+  const lang = data.users[uid]?.lang || 'ru';
   const proof = await downloadProof(fileId, msgId);
   let ocr = null;
   if (proof) {
@@ -284,46 +306,57 @@ async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
   }
   if (!ocr) {
     delete data.state[uid];
-    send(chatId, 'Скрин получил, но не смог разобрать твою строку 🤔\nПришли скриншот ещё раз — чётче и покрупнее: весь экран рейтинга после боя, без обрезки краёв.');
+    send(chatId, t(lang, 'ocrFail'));
     return;
   }
   const ts = msgDate || Math.floor(Date.now() / 1000);
   const date = gameDate(ts);
   const ok = recordEntry(uid, msgId, date, ocr.dmg, ocr.raw, ts, proof);
   delete data.state[uid];
-  const clan = CLANS[data.users[uid]?.clan] ? ` (${CLANS[data.users[uid].clan]})` : '';
   send(chatId, ok
-    ? `✅ Записал: ${data.users[uid].nick} — ${fmtDmg(ocr.dmg)} за ${date.split('-').reverse().join('.')}${clan}`
-    : 'Что-то сломалось, попробуй прислать скрин ещё раз.');
+    ? t(lang, 'recorded', {
+      nick: data.users[uid].nick, dmg: fmtDmg(ocr.dmg),
+      date: date.split('-').reverse().join('.'), clan: CLANS[data.users[uid]?.clan || 'unity'],
+    })
+    : t(lang, 'broken'));
 }
 
-/* кнопки: выбор клана (clan:unity / clan:unity2); на нажатия старых «Записать» —
+/* кнопки: выбор клана (clan:*) и языка (lang:*); на нажатия старых «Записать» —
  * перенаправляем на новый сценарий */
 async function handleCallback(q) {
   if (!q.from || q.from.is_bot) return;
   await tg('answerCallbackQuery', { callback_query_id: q.id });
   const uid = String(q.from.id);
+  const lang = pickLang(uid, q.from);
   if (q.data?.startsWith('clan:')) {
     const clan = q.data.slice(5);
     if (!CLANS[clan] || !data.users[uid]?.nick) return; // кнопка без регистрации — игнорируем
     const had = data.users[uid].clan;
     data.users[uid].clan = clan;
+    if (!data.users[uid].lang) data.users[uid].lang = lang; // язык могли ещё не запомнить
     const st = data.state[uid];
     delete data.state[uid];
     const chatId = q.message?.chat?.id || uid;
-    send(chatId, had
-      ? `Клан изменён: ${CLANS[clan]} ✅ (прошлые записи остаются за прежним кланом)`
-      : `Записал: клан ${CLANS[clan]} ✅\nТеперь просто отправляй скриншот рейтинга — урон я распознаю сам.`);
+    send(chatId, had ? t(lang, 'clanChanged', { clan: CLANS[clan] }) : t(lang, 'clanSet', { clan: CLANS[clan] }));
     if (st?.await === 'clan' && st.fileId) {
       // скрин был прислан до ответа — распознаём сразу
       await processPhoto(uid, chatId, st.fileId, st.msgId, st.msgDate);
     }
     return;
   }
+  if (q.data?.startsWith('lang:')) {
+    const newLang = q.data.slice(5);
+    if (newLang !== 'ru' && newLang !== 'en') return;
+    if (!data.users[uid]?.nick) return; // без регистрации выбор затёрся бы автоопределением
+    data.users[uid].lang = newLang;
+    const chatId = q.message?.chat?.id || uid;
+    send(chatId, t(newLang, newLang === 'ru' ? 'langSetRu' : 'langSetEn'));
+    return;
+  }
   delete data.state[uid];
   tg('sendMessage', {
     chat_id: q.from.id,
-    text: 'Кнопка больше не нужна — урон со скрина записываю сразу.\nЕсли значение не записалось или неверное: /undo и пришли скриншот заново.',
+    text: t(lang, 'legacyButton'),
   });
 }
 
@@ -335,6 +368,11 @@ async function handleMessage(msg) {
   const group = msg.chat.type !== 'private';
   const st = data.state[uid] || {};
 
+  // автоопределение языка от Telegram: запоминаем один раз, молча (меняется через /lang)
+  const lang = pickLang(uid, msg.from);
+  if (data.users[uid] && !data.users[uid].lang && normLang(msg.from.language_code)) {
+    data.users[uid].lang = normLang(msg.from.language_code);
+  }
   const meta = { tgUsername: msg.from.username || null, first: msg.from.first_name || null };
   if (data.users[uid]) Object.assign(data.users[uid], meta);
 
@@ -345,7 +383,7 @@ async function handleMessage(msg) {
 
   // медиа → доказательство = скриншот/фото; видео отклоняем
   if (msg.video || msg.animation) {
-    send(msg.chat.id, 'Видео не принимаем 🙈 Пришли скриншот рейтинга картинкой — урон я распознаю сам.');
+    send(msg.chat.id, t(lang, 'videoNo'));
     return;
   }
   const fileId = msg.photo?.at(-1)?.file_id;
@@ -354,29 +392,29 @@ async function handleMessage(msg) {
   // Присланный скрин удерживаем и распознаём сразу после ответа кнопкой
   if (data.users[uid] && !data.users[uid].clan && st.await !== 'clan') {
     data.state[uid] = { await: 'clan', ...(fileId ? { fileId, msgId: msg.message_id, msgDate: msg.date } : {}) };
-    askClan(msg.chat.id);
+    askClan(msg.chat.id, lang);
     return;
   }
   if (st.await === 'clan') {
     if (fileId) data.state[uid] = { await: 'clan', fileId, msgId: msg.message_id, msgDate: msg.date };
-    send(msg.chat.id, 'Сначала выбери клан кнопкой выше 👆');
+    send(msg.chat.id, t(lang, 'clanRemind'));
     return;
   }
 
   if (fileId) {
     if (!data.users[uid]) {
       if (group && msg.from.username) {
-        data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), ...meta };
-        send(msg.chat.id, `@${msg.from.username}, записал тебя как «${msg.from.username}» (совпало с ником Telegram). Если игровой ник другой — /nick НовыйНик мне в личку.`);
+        data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), lang, ...meta };
+        send(msg.chat.id, t(lang, 'groupAutoreg', { username: msg.from.username }));
         data.state[uid] = { await: 'clan', fileId, msgId: msg.message_id, msgDate: msg.date };
-        askClan(msg.chat.id);
+        askClan(msg.chat.id, lang);
         return;
       } else if (group) {
-        send(msg.chat.id, 'Зарегистрируйся у меня в личке: @Archero2Unity_bot → /start (и сразу кидай скрины сюда)');
+        send(msg.chat.id, t(lang, 'groupRegister'));
         return;
       } else {
         data.state[uid] = { await: 'nick', fileId };
-        send(msg.chat.id, 'Сначала напиши свой игровой ник (как в Archero 2):');
+        send(msg.chat.id, t(lang, 'askNick'));
         return;
       }
     }
@@ -389,22 +427,22 @@ async function handleMessage(msg) {
 
   // ожидание ника
   if (st.await === 'nick') {
-    if (text.length > 24 || /[\n]/.test(text) || parseDamage(text)) { send(msg.chat.id, 'Это похоже не на ник. Напиши игровой ник (до 24 символов):'); return; }
-    data.users[uid] = { nick: text, joined: new Date().toISOString(), ...meta };
+    if (text.length > 24 || /[\n]/.test(text) || parseDamage(text)) { send(msg.chat.id, t(lang, 'notNick')); return; }
+    data.users[uid] = { nick: text, joined: new Date().toISOString(), lang, ...meta };
     // следом спрашиваем клан; скрин, присланный до ника, удерживаем до ответа
     data.state[uid] = { await: 'clan', ...(st.fileId ? { fileId: st.fileId, msgId: msg.message_id, msgDate: msg.date } : {}) };
-    send(msg.chat.id, `Отлично, ${text}! 🏹`);
-    askClan(msg.chat.id);
+    send(msg.chat.id, t(lang, 'nickGreat', { nick: text }));
+    askClan(msg.chat.id, lang);
     return;
   }
 
   // ручной ввод урона отключён — запись только со скриншота
   if (parseDamage(text)) {
-    if (!group) send(msg.chat.id, 'Числа больше не принимаю 🙈 Пришли скриншот рейтинга — урон распознаю с него.');
+    if (!group) send(msg.chat.id, t(lang, 'numbersNo'));
     return;
   }
 
-  if (!group) send(msg.chat.id, 'Не понял 🤔 Пришли скриншот рейтинга — урон я распознаю сам.\n/help — все команды');
+  if (!group) send(msg.chat.id, t(lang, 'noUnderstand'));
 }
 
 // ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
