@@ -34,7 +34,23 @@ header {
 .brand { font-size: 22px; font-weight: 300; letter-spacing: .3px; }
 .brand b { font-weight: 800; color: var(--accent); }
 .sub { color: var(--muted); font-size: 14px; }
-.updated { margin-left: auto; color: var(--muted); font-size: 12.5px; }
+
+/* переключатель языка интерфейса (ru/en/vi) */
+.lang-switch { margin-left: auto; display: flex; gap: 4px; align-self: center; }
+.lang-switch button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-switch button:hover { border-color: var(--accent); color: var(--text); }
+.lang-switch button.active { color: var(--accent); border-color: var(--accent); }
+.updated { margin-left: 10px; color: var(--muted); font-size: 12.5px; align-self: center; }
 
 
 .month-nav {
@@ -273,6 +289,7 @@ header {
 
 @media (max-width: 640px) {
   .brand { font-size: 19px; }
+  .lang-switch { margin-left: 0; }
   .updated { margin-left: 0; width: 100%; }
   .card span { font-size: 20px; }
   .cal-grid, .cal-weekdays { gap: 3px; }

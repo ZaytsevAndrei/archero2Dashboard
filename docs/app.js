@@ -1,14 +1,128 @@
-/* Календарь урона — Archero 2 guild Unity.
+/* Календарь урона — Archero 2, кланы Unity и Unity2.
  * Один календарь месяца; клик по дате — детали дня под календарём.
- * Данные: data.json (коммитится ботом через GitHub Actions). Без фреймворков. */
+ * Данные: data.json (коммитится ботом). Без фреймворков.
+ * Языки интерфейса: ru / en / vi — автораспознавание по браузеру,
+ * переключатель в шапке, выбор помнится в localStorage. */
 'use strict';
 
-const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const WEEKDAYS_FULL = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+/* ---------- i18n ---------- */
+const CAL = {
+  ru: {
+    months: ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+      'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'],
+    monthGen: ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+      'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'],
+    wd: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+    wdFull: ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'],
+  },
+  en: {
+    months: ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'],
+    monthGen: [],
+    wd: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+    wdFull: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+  },
+  vi: {
+    months: ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
+      'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'],
+    monthGen: [],
+    wd: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
+    wdFull: ['thứ Hai', 'thứ Ba', 'thứ Tư', 'thứ Năm', 'thứ Sáu', 'thứ Bảy', 'Chủ nhật'],
+  },
+};
+
+const I18N = {
+  ru: {
+    title: 'Unity & Unity2 — Календарь урона · Archero 2',
+    brand: 'Календарь урона',
+    sub: 'Вторжение монстров',
+    loading: 'загрузка…',
+    updated: 'обновлено',
+    loadFailed: 'не удалось загрузить данные',
+    prevMonth: 'Предыдущий месяц',
+    nextMonth: 'Следующий месяц',
+    today: 'Сегодня',
+    tabAll: 'Все кланы',
+    cardPlayers: 'участников',
+    cardToday: 'урона сегодня',
+    cardMonth: 'сумма за месяц',
+    hCalendar: 'Календарь урона',
+    hintCalendar: 'Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.',
+    hLeaderboard: 'Рейтинг за месяц',
+    hHowto: 'Как попасть в календарь',
+    howto1: 'Открой бота',
+    howto2: 'Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2',
+    howto3: 'Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его',
+    hintBot: 'Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.',
+    dayNone: 'За этот день урона не присылали 🏹',
+    from: 'от',
+    noData: 'Пока нет данных.',
+    bestDay: 'лучший день',
+    proofTitle: 'Открыть скриншот',
+    proofAlt: 'Доказательство',
+    noProof: 'Скриншот не приложен',
+  },
+  en: {
+    title: 'Unity & Unity2 — Damage calendar · Archero 2',
+    brand: 'Damage calendar',
+    sub: 'Monster invasion',
+    loading: 'loading…',
+    updated: 'updated',
+    loadFailed: 'failed to load data',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
+    today: 'Today',
+    tabAll: 'All clans',
+    cardPlayers: 'participants',
+    cardToday: 'damage today',
+    cardMonth: 'month total',
+    hCalendar: 'Damage calendar',
+    hintCalendar: "A cell is the day's total damage (of the selected clan or all clans); the color goes from green (low) to red (month record). Dimmed days at the edges belong to the neighboring months. Click a date to see each player's damage for that day below. 🧾 — screenshot proof.",
+    hLeaderboard: 'Monthly leaderboard',
+    hHowto: 'How to get on the calendar',
+    howto1: 'Open the bot',
+    howto2: 'Send <b>/start</b>, type your in-game nickname and pick your clan — Unity or Unity2',
+    howto3: 'Send a <b>rating screenshot</b> — the bot will recognize and record the damage itself',
+    hintBot: 'The bot replies instantly; data appears on the site a couple of minutes after the report.',
+    dayNone: 'No damage reported this day 🏹',
+    from: 'from',
+    noData: 'No data yet.',
+    bestDay: 'best day',
+    proofTitle: 'Open screenshot',
+    proofAlt: 'Proof',
+    noProof: 'No screenshot attached',
+  },
+  vi: {
+    title: 'Unity & Unity2 — Lịch sát thương · Archero 2',
+    brand: 'Lịch sát thương',
+    sub: 'Xâm lăng quái vật',
+    loading: 'đang tải…',
+    updated: 'cập nhật',
+    loadFailed: 'không tải được dữ liệu',
+    prevMonth: 'Tháng trước',
+    nextMonth: 'Tháng sau',
+    today: 'Hôm nay',
+    tabAll: 'Tất cả các bang',
+    cardPlayers: 'người tham gia',
+    cardToday: 'sát thương hôm nay',
+    cardMonth: 'tổng trong tháng',
+    hCalendar: 'Lịch sát thương',
+    hintCalendar: 'Mỗi ô là tổng sát thương trong ngày (của bang đã chọn hoặc tất cả); màu từ xanh lá (thấp) đến đỏ (kỷ lục tháng). Những ngày mờ ở rìa là của tháng lân cận. Bấm vào ngày để xem sát thương của từng người chơi. 🧾 — ảnh bằng chứng.',
+    hLeaderboard: 'Bảng xếp hạng tháng',
+    hHowto: 'Cách ghi danh vào lịch',
+    howto1: 'Mở bot',
+    howto2: 'Gửi <b>/start</b>, nhập nickname trong game và chọn bang — Unity hoặc Unity2',
+    howto3: 'Gửi <b>ảnh chụp bảng xếp hạng</b> — bot sẽ tự nhận diện và ghi lại sát thương',
+    hintBot: 'Bot trả lời ngay lập tức; dữ liệu xuất hiện trên web sau vài phút.',
+    dayNone: 'Ngày này chưa ai gửi sát thương 🏹',
+    from: 'của',
+    noData: 'Chưa có dữ liệu.',
+    bestDay: 'ngày tốt nhất',
+    proofTitle: 'Mở ảnh chụp màn hình',
+    proofAlt: 'Bằng chứng',
+    noProof: 'Không có ảnh chụp màn hình',
+  },
+};
 
 const CLANS = { unity: 'Unity', unity2: 'Unity2' };
 const clanOf = (e) => e.clan || 'unity'; // записи до появления Unity2 — все из Unity
@@ -18,7 +132,46 @@ const state = {
   month: null,            // {y, m} — просматриваемый месяц
   selectedDate: null,     // выбранная дата 'YYYY-MM-DD' (по умолчанию сегодня)
   clan: 'all',            // вкладка клана: 'all' | 'unity' | 'unity2'
+  lang: null,             // язык интерфейса: 'ru' | 'en' | 'vi'
 };
+
+/* язык: сохранённый выбор → первый поддерживаемый из настроек браузера → ru */
+function detectLang() {
+  try {
+    const saved = localStorage.getItem('lang');
+    if (saved && I18N[saved]) return saved;
+  } catch (e) { /* приватный режим — просто автоопределение */ }
+  const prefs = (navigator.languages || [navigator.language]).map((s) => String(s).slice(0, 2).toLowerCase());
+  for (const p of prefs) if (I18N[p]) return p;
+  return 'ru';
+}
+const L = (key) => I18N[state.lang]?.[key] ?? I18N.ru[key] ?? key;
+const cal = () => CAL[state.lang] || CAL.ru;
+
+/* формы множественного числа: ru — 1/2-4/5+, остальные — 1/many (vi не пользуется) */
+function plural(n, one, few, many) {
+  if (state.lang !== 'ru') return n === 1 ? one : many;
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? one : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many);
+}
+const participantsWord = (n) => {
+  if (state.lang === 'en') return plural(n, 'participant', '', 'participants');
+  if (state.lang === 'vi') return 'người tham gia';
+  return plural(n, 'участник', 'участника', 'участников');
+};
+const daysWord = (n) => {
+  if (state.lang === 'en') return plural(n, 'day', '', 'days');
+  if (state.lang === 'vi') return 'ngày';
+  return 'дн.';
+};
+
+/* «5 октября · понедельник» / «October 5 · Monday» / «5 tháng 10 · thứ Hai» */
+function dayTitle(d, mon, wdIdx) {
+  const wd = cal().wdFull[wdIdx];
+  if (state.lang === 'en') return `${cal().months[mon]} ${d} · ${wd}`;
+  if (state.lang === 'vi') return `${d} tháng ${mon + 1} · ${wd}`;
+  return `${d} ${cal().monthGen[mon]} · ${wd}`;
+}
 
 /* ---------- утилиты ---------- */
 const $ = (id) => document.getElementById(id);
@@ -63,17 +216,33 @@ function rankColor(idx, total) {
 }
 
 /* ---------- данные ---------- */
+/* статичные тексты (data-i18n / data-i18n-title / data-i18n-alt) + заголовок;
+ * разметка в значениях словаря (<b> в howto) — наша, не пользовательская */
+function applyI18n() {
+  document.documentElement.lang = state.lang;
+  document.title = L('title');
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.innerHTML = L(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = L(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-alt]').forEach((el) => { el.alt = L(el.dataset.i18nAlt); });
+  document.querySelectorAll('#lang-switch button').forEach((b) => b.classList.toggle('active', b.dataset.lang === state.lang));
+}
+
+function fmtUpdated() {
+  if (!state.raw.updatedAt) return L('loading');
+  const upd = new Date(state.raw.updatedAt);
+  return `${L('updated')} ${pad(upd.getHours())}:${pad(upd.getMinutes())}`;
+}
+
 async function loadData() {
   try {
     const res = await fetch(`data.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
     state.raw = await res.json();
   } catch (e) {
-    $('updated').textContent = 'не удалось загрузить данные';
+    $('updated').textContent = L('loadFailed');
     return;
   }
-  const upd = state.raw.updatedAt ? new Date(state.raw.updatedAt) : null;
-  $('updated').textContent = upd ? `обновлено ${pad(upd.getHours())}:${pad(upd.getMinutes())}` : '';
+  $('updated').textContent = fmtUpdated();
   render();
 }
 
@@ -124,7 +293,7 @@ function render() {
   }
   if (!state.selectedDate) state.selectedDate = t; // выбор дня меняет клик по сетке, не перерисовка
   const { y, m } = state.month;
-  $('month-label').textContent = `${MONTHS_RU[m]} ${y}`;
+  $('month-label').textContent = `${cal().months[m]} ${y}`;
 
   const map = cellMap();
   const days = dayTotals(map);
@@ -149,7 +318,7 @@ function render() {
     perClan[clanOf(e)]?.add(e.nick);
   }
   document.querySelectorAll('#clan-tabs .clan-tab').forEach((b) => {
-    const base = b.dataset.clan === 'all' ? 'Все кланы' : CLANS[b.dataset.clan];
+    const base = b.dataset.clan === 'all' ? L('tabAll') : CLANS[b.dataset.clan];
     b.textContent = perClan[b.dataset.clan].size ? `${base} · ${perClan[b.dataset.clan].size}` : base;
   });
 
@@ -208,7 +377,7 @@ function renderCalendar(daysAll, t) {
   for (let d = 1; d <= tail; d++) cells.push(cell(`${ny}-${pad(m === 11 ? 1 : m + 2)}-${pad(d)}`, d, true));
 
   $('calendar').innerHTML =
-    `<div class="cal-weekdays">${WEEKDAYS.map((w, i) => `<span class="${i > 4 ? 'wend' : ''}">${w}</span>`).join('')}</div>` +
+    `<div class="cal-weekdays">${cal().wd.map((w, i) => `<span class="${i > 4 ? 'wend' : ''}">${w}</span>`).join('')}</div>` +
     `<div class="cal-grid">${cells.join('')}</div>`;
 }
 
@@ -224,7 +393,7 @@ function renderDayPanel(map) {
   const ds = state.selectedDate;
   const d = Number(ds.slice(8));
   const mon = Number(ds.slice(5, 7)) - 1;
-  const wd = WEEKDAYS_FULL[(new Date(Number(ds.slice(0, 4)), mon, d).getDay() + 6) % 7];
+  const wd = (new Date(Number(ds.slice(0, 4)), mon, d).getDay() + 6) % 7;
   const rows = [...map.entries()]
     .filter(([k, e]) => e.date === ds)
     .map(([k, e]) => e)
@@ -236,15 +405,16 @@ function renderDayPanel(map) {
       <li>
         <span class="rank">${i + 1}</span>
         <span class="name">${esc(e.nick)}${clanChip(clanOf(e))}</span>
-        ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="Открыть скриншот">🧾</button>` : ''}
+        ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="${L('proofTitle')}">🧾</button>` : ''}
         <span class="total">${fmtDmg(e.dmg)}</span>
         <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%;background:${rankColor(i, rows.length)}"></i></span>
       </li>`).join('')
-    : `<li class="today-none">За этот день урона не присылали 🏹</li>`;
+    : `<li class="today-none">${L('dayNone')}</li>`;
 
-  $('day-title').textContent = `${d} ${MONTH_GEN[mon]} · ${wd}`;
+  $('day-title').textContent = dayTitle(d, mon, wd);
   $('day-list').innerHTML = list;
-  $('day-total').textContent = rows.length ? `Σ ${fmtDmg(total)} от ${rows.length} участник${rows.length === 1 ? 'а' : 'ов'}` : '';
+  $('day-total').textContent = rows.length
+    ? `Σ ${fmtDmg(total)} ${L('from')} ${rows.length} ${participantsWord(rows.length)}` : '';
 }
 
 function renderLeaderboard(nicks, byNick, map) {
@@ -260,9 +430,9 @@ function renderLeaderboard(nicks, byNick, map) {
       <span class="name">${esc(nick)}${clanChip(st.clan)}</span>
       <span class="total">${fmtDmg(st.total)}</span>
       <span class="bar"><i style="width:${w}%;background:${rankColor(i, shown.length)}"></i></span>
-      <span class="meta">${st.days} дн. · лучший день ${bestDay ? fmtDmg(bestDay.dmg) : '—'}</span>
+      <span class="meta">${st.days} ${daysWord(st.days)} · ${L('bestDay')} ${bestDay ? fmtDmg(bestDay.dmg) : '—'}</span>
     </li>`;
-  }).join('') || '<li class="meta" style="grid-template-columns:1fr">Пока нет данных.</li>';
+  }).join('') || `<li class="meta" style="grid-template-columns:1fr">${L('noData')}</li>`;
 }
 
 
@@ -319,6 +489,19 @@ $('popup-close').onclick = () => { $('cell-popup').hidden = true; };
 $('cell-popup').addEventListener('click', (ev) => { if (ev.target === $('cell-popup')) $('cell-popup').hidden = true; });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('cell-popup').hidden = true; });
 
+/* переключатель языка: запоминаем выбор и перерисовываем весь интерфейс */
+$('lang-switch').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-lang]');
+  if (!btn || btn.dataset.lang === state.lang) return;
+  state.lang = btn.dataset.lang;
+  try { localStorage.setItem('lang', state.lang); } catch (e) { /* приватный режим */ }
+  applyI18n();
+  $('updated').textContent = fmtUpdated();
+  render();
+});
+
 /* старт + автообновление раз в минуту */
+state.lang = detectLang();
+applyI18n();
 loadData();
 setInterval(loadData, 60_000);

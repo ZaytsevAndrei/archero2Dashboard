@@ -5,21 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Unity &amp; Unity2 — Календарь урона · Archero 2</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <header>
-  <div class="brand">🏹 Календарь урона · <b>Unity</b> &amp; <b>Unity2</b></div>
-  <div class="sub">Вторжение монстров · Archero 2</div>
-  <div class="updated" id="updated">загрузка…</div>
+  <div class="brand">🏹 <span data-i18n="brand">Календарь урона</span> · <b>Unity</b> &amp; <b>Unity2</b></div>
+  <div class="sub"><span data-i18n="sub">Вторжение монстров</span> · Archero 2</div>
+  <nav class="lang-switch" id="lang-switch" aria-label="Язык / Language / Ngôn ngữ">
+    <button type="button" data-lang="ru">RU</button>
+    <button type="button" data-lang="en">EN</button>
+    <button type="button" data-lang="vi">VI</button>
+  </nav>
+  <div class="updated" id="updated" data-i18n="loading">загрузка…</div>
 </header>
 
 <main>
   <nav class="month-nav">
-    <button id="prev-month" title="Предыдущий месяц">‹</button>
+    <button id="prev-month" title="Предыдущий месяц" data-i18n-title="prevMonth">‹</button>
     <div id="month-label">—</div>
-    <button id="next-month" title="Следующий месяц">›</button>
-    <button id="today-btn" class="ghost">Сегодня</button>
+    <button id="next-month" title="Следующий месяц" data-i18n-title="nextMonth">›</button>
+    <button id="today-btn" class="ghost" data-i18n="today">Сегодня</button>
   </nav>
 
   <nav class="clan-tabs" id="clan-tabs">
@@ -29,15 +34,15 @@
   </nav>
 
   <div class="cards">
-    <div class="card"><span id="stat-players">–</span><label>участников</label></div>
-    <div class="card"><span id="stat-today">–</span><label>урона сегодня</label></div>
-    <div class="card"><span id="stat-month">–</span><label>сумма за месяц</label></div>
+    <div class="card"><span id="stat-players">–</span><label data-i18n="cardPlayers">участников</label></div>
+    <div class="card"><span id="stat-today">–</span><label data-i18n="cardToday">урона сегодня</label></div>
+    <div class="card"><span id="stat-month">–</span><label data-i18n="cardMonth">сумма за месяц</label></div>
   </div>
 
   <section class="panel">
-    <h2>Календарь урона</h2>
+    <h2 data-i18n="hCalendar">Календарь урона</h2>
     <div id="calendar"></div>
-    <p class="hint">Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
+    <p class="hint" data-i18n="hintCalendar">Ячейка — сумма урона за день (выбранного клана или всех вместе), цвет — от зелёного (мало) к красному (рекорд месяца). Приглушённые дни на краях сетки — соседние месяцы. Нажми на дату — ниже появится урон каждого игрока за этот день. 🧾 — скриншот-доказательство.</p>
   </section>
 
   <section class="panel today-panel">
@@ -47,18 +52,18 @@
   </section>
 
   <section class="panel">
-    <h2>Рейтинг за месяц</h2>
+    <h2 data-i18n="hLeaderboard">Рейтинг за месяц</h2>
     <ol id="leaderboard" class="leaderboard"></ol>
   </section>
 
   <section class="panel">
-    <h2>Как попасть в календарь</h2>
+    <h2 data-i18n="hHowto">Как попасть в календарь</h2>
     <ol class="howto">
-      <li>Открой бота <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
-      <li>Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2</li>
-      <li>Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его</li>
+      <li><span data-i18n="howto1">Открой бота</span> <a href="https://t.me/Archero2Unity_bot" target="_blank" rel="noopener">@Archero2Unity_bot</a></li>
+      <li data-i18n="howto2">Отправь <b>/start</b>, напиши игровой ник и выбери клан — Unity или Unity2</li>
+      <li data-i18n="howto3">Отправь <b>скриншот</b> рейтинга — бот сам распознает урон и запишет его</li>
     </ol>
-    <p class="hint">Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.</p>
+    <p class="hint" data-i18n="hintBot">Бот отвечает мгновенно, данные появляются на сайте через пару минут после отчёта.</p>
   </section>
 </main>
 
@@ -67,11 +72,11 @@
     <button class="modal-close" id="popup-close">✕</button>
     <h3 id="popup-title">—</h3>
     <div id="popup-damage" class="popup-damage">—</div>
-    <img id="popup-proof" alt="Доказательство" hidden>
-    <div id="popup-noproof" class="hint">Скриншот не приложен</div>
+    <img id="popup-proof" alt="Доказательство" data-i18n-alt="proofAlt" hidden>
+    <div id="popup-noproof" class="hint" data-i18n="noProof">Скриншот не приложен</div>
   </div>
 </div>
 
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
