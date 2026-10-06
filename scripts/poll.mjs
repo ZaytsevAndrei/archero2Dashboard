@@ -5,22 +5,24 @@
  * Без зависимостей: node >= 18 (глобальный fetch).
  *
  * Логика бота:
+ *   доступ        → скрины и команды принимаются только от админов и «допущенных»
+ *                  игроков (список — docs/config.json, правится админом на сайте
+ *                  docs/admin.html через GitHub API); чужим — отказ + уведомление
+ *                  админам с Telegram ID для добавления
  *   /start        → приветствие + запрос игрового ника, затем клана (Unity / Unity2)
  *   ник текстом   → регистрация
- *   клан кнопкой  → выбор клана: при регистрации, /clan — сменить; кроме того,
- *                  с CLAN_ASK_FROM при первом фото каждый игрок уточняет клан
- *                  ещё раз (один раз — игроки разошлись по разным кланам)
- *   фото-скрин   → OCR: бот ищет строку с ником игрока и сразу записывает урон
- *                  (не распознал — просит скрин получше); в ответе о записанном
- *                  уроне перечислены команды бота
+ *   клан кнопкой  → выбор клана: при регистрации, /clan — сменить
+ *   фото-скрин    → OCR всего списка рейтинга: записываются ВСЕ игроки на скрине
+ *                  (альбом из нескольких картинок обрабатывается пачкой, один
+ *                  итоговый ответ); не распознал — просит скрин получше
  *   /nick Имя     → сменить ник
  *   /clan         → указать/сменить клан (Unity / Unity2)
  *   /lang         → язык бота (авто по языку клиента Telegram: ru / en)
- *   /undo         → удалить свою последнюю запись
+ *   /undo         → удалить свою последнюю запись (или всю последнюю отправку-альбом)
  *   /stats        → мои записи за 7 дней
  *   /bug текст    → жалоба: текстом или пересылкой сообщения бота с ошибкой;
  *                  попадает в data.bugs (уходит в git вместе с данными),
- *                  владельцу летит уведомление (OWNER_CHAT_ID)
+ *                  админам летит уведомление (config.admins)
  *
  * Язык реплик определяется автоматически по from.language_code (клиент Telegram),
  * запоминается в users[uid].lang при первом контакте и меняется через /lang.
@@ -38,11 +40,12 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { ocrOwnRow } from './ocr.mjs';
+import { ocrOwnRow, ocrBoard, matchNick } from './ocr.mjs';
 import { normLang, t } from './i18n.mjs';
 
 const ROOT = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const DATA_FILE = path.join(ROOT, 'docs', 'data.json');
+const CONFIG_FILE = path.join(ROOT, 'docs', 'config.json');
 const PROOFS_DIR = path.join(ROOT, 'docs', 'proofs');
 const TZ = process.env.TZ_NAME || 'Europe/Moscow';
 const SITE_URL = process.env.SITE_URL || 'https://zaytsevandrei.github.io/archero2Dashboard/';
@@ -63,7 +66,7 @@ if (!process.env.TG_TOKEN) {
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // ---------- data ----------
-const emptyData = () => ({ offset: 0, state: {}, users: {}, entries: [], bugs: [], updatedAt: null });
+const emptyData = () => ({ offset: 0, state: {}, users: {}, entries: [], bugs: [], denied: {}, updatedAt: null });
 let data;
 if (existsSync(DATA_FILE)) {
   try { data = { ...emptyData(), ...JSON.parse(readFileSync(DATA_FILE, 'utf8')) }; }
@@ -71,7 +74,7 @@ if (existsSync(DATA_FILE)) {
 } else { data = emptyData(); }
 
 // снимок значимых полей: если не изменились — файл не трогаем (иначе коммит каждые 5 минут)
-const DATA_KEYS = ['offset', 'state', 'users', 'entries', 'bugs'];
+const DATA_KEYS = ['offset', 'state', 'users', 'entries', 'bugs', 'denied'];
 const snapshot = () => JSON.stringify(DATA_KEYS.map((k) => data[k]));
 const initialSnapshot = snapshot();
 
@@ -110,6 +113,42 @@ const gameDate = (ts) => {
 const needClanCheck = (uid) =>
   gameDate(Date.now() / 1000) >= CLAN_ASK_FROM && !!data.users[uid]
   && (!data.users[uid].clanCheck || data.users[uid].clanCheck < CLAN_ASK_FROM);
+
+// ---------- доступ: админы и допущенные отправители скринов ----------
+/* Список живёт в docs/config.json, правит его админ на сайте (docs/admin.html
+ * через GitHub API); бот файл только читает — своего сословного конфликта в git
+ * не бывает. Владелец (OWNER_CHAT_ID) — всегда админ, чтобы не потерять доступ. */
+let config = { admins: [OWNER_CHAT_ID], submitters: [] };
+function loadConfig() {
+  try {
+    const raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    config = {
+      admins: [...new Set([OWNER_CHAT_ID, ...(Array.isArray(raw.admins) ? raw.admins.map(String) : [])])],
+      submitters: (Array.isArray(raw.submitters) ? raw.submitters : [])
+        .filter((s) => s && String(s.tgId ?? '').trim())
+        .map((s) => ({
+          tgId: String(s.tgId),
+          nick: String(s.nick || '').slice(0, 24),
+          clan: CLANS[s.clan] ? s.clan : null,
+          tgUsername: s.tgUsername || null,
+          added: s.added || null,
+        })),
+    };
+    console.log(`config: админов ${config.admins.length}, допущенных ${config.submitters.length}`);
+  } catch (e) {
+    console.log(`config.json не читается (${e.message}) — работаю с админом по умолчанию`);
+  }
+}
+loadConfig();
+
+const isAdmin = (uid) => config.admins.includes(uid);
+const submitterOf = (uid) => config.submitters.find((s) => s.tgId === uid) || null;
+const isAllowed = (uid) => isAdmin(uid) || !!submitterOf(uid);
+
+/* уведомление всем админам (запросы доступа, /bug) */
+const notifyAdmins = (text) => {
+  for (const a of config.admins) tg('sendMessage', { chat_id: a, text });
+};
 
 // ---------- damage parsing ----------
 // «5.91T», «5,91т», «209.77T», «700M», «12K», «5.91» (без суффикса = триллионы)
@@ -260,10 +299,7 @@ function saveBug(uid, msg, text) {
     timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(new Date(bug.ts * 1000));
   const who = [bug.nick, bug.tgUsername ? '@' + bug.tgUsername : null, `id${bug.tgId}`].filter(Boolean).join(' · ');
-  tg('sendMessage', {
-    chat_id: OWNER_CHAT_ID,
-    text: `🐞 Жалоба (${when})\nОт: ${who}${fwd ? `\nПереслано от: ${fwd}` : ''}\n\n${bug.text}`,
-  });
+  notifyAdmins(`🐞 Жалоба (${when})\nОт: ${who}${fwd ? `\nПереслано от: ${fwd}` : ''}\n\n${bug.text}`);
 }
 
 function handleCommand(msg) {
@@ -321,17 +357,26 @@ function handleCommand(msg) {
     return;
   }
   if (c === 'undo') {
-    const mine = data.entries.filter((e) => e.tgId === uid && !e.demo);
+    // свои записи и записи с наших отправлений (via) — альбомы имеют общий grp:
+    // /undo снимает всю последнюю отправку целиком, одиночное фото — одну запись
+    const mine = data.entries.filter((e) => !e.demo && (e.tgId === uid || e.via === uid));
     if (!mine.length) { send(msg.chat.id, t(lang, 'undoNone')); return; }
     const last = mine.reduce((a, b) => (a.ts >= b.ts ? a : b));
+    if (last.grp) {
+      const grp = data.entries.filter((e) => e.grp === last.grp && e.via === uid && !e.demo);
+      data.entries = data.entries.filter((e) => !grp.includes(e));
+      send(msg.chat.id, t(lang, 'undoAlbumDone', { n: grp.length, date: last.date.split('-').reverse().join('.') }));
+      return;
+    }
     data.entries = data.entries.filter((e) => e !== last);
-    send(msg.chat.id, t(lang, 'undoDone', { raw: last.raw || fmtDmg(last.dmg), date: last.date }));
+    send(msg.chat.id, t(lang, 'undoDone', { raw: last.raw || fmtDmg(last.dmg), date: last.date.split('-').reverse().join('.') }));
     return;
   }
   if (c === 'stats') {
     if (!user) { send(msg.chat.id, t(lang, 'notRegistered')); return; }
     const week = gameDate(Date.now() / 1000 - 7 * 86400);
-    const mine = data.entries.filter((e) => e.tgId === uid && e.date >= week).sort((a, b) => a.date.localeCompare(b.date));
+    // урон мог прийти и из чужих альбомов — такие записи ищем по нику
+    const mine = data.entries.filter((e) => !e.demo && (e.tgId === uid || e.nick === user.nick) && e.date >= week).sort((a, b) => a.date.localeCompare(b.date));
     const head = user.clan
       ? t(lang, 'statsHead', { nick: user.nick, clan: CLANS[user.clan] })
       : t(lang, 'statsHeadPlain', { nick: user.nick });
@@ -390,6 +435,102 @@ async function processPhoto(uid, chatId, fileId, msgId, msgDate) {
     : t(lang, 'broken'));
 }
 
+// ---------- альбомы ----------
+/* Telegram присылает альбом как N сообщений с общим media_group_id — копим их
+ * (таймер 3 с после последнего фото + досрочный флуш в конце пачки апдейтов)
+ * и обрабатываем одной пачкой, чтобы ответить на альбом один раз */
+const pendingGroups = new Map(); // media_group_id → { uid, chatId, items, timer, busy }
+
+function bufferPhoto(uid, chatId, groupId, fileId, msgId, msgDate) {
+  let g = pendingGroups.get(groupId);
+  if (!g) { g = { uid, chatId, items: [], timer: null, busy: false }; pendingGroups.set(groupId, g); }
+  if (g.items.length >= 30) return; // аномально длинная группа — дальше игнорируем
+  g.items.push({ fileId, msgId, date: msgDate });
+  clearTimeout(g.timer);
+  g.timer = setTimeout(() => flushGroup(groupId), 3000);
+}
+
+async function flushGroup(groupId) {
+  const g = pendingGroups.get(groupId);
+  if (!g || g.busy) return;
+  g.busy = true;
+  pendingGroups.delete(groupId);
+  clearTimeout(g.timer);
+  try { await processAlbum(g.uid, g.chatId, g.items.map((it) => ({ ...it, grp: groupId }))); }
+  catch (e) { console.error('processAlbum:', e.message); }
+}
+
+const flushGroups = () => Promise.allSettled([...pendingGroups.keys()].map((k) => flushGroup(k)));
+
+/* обработать пачку скринов (альбом или одиночное фото): на каждом скрине виден
+ * список рейтинга гильдии — записываем КАЖДОГО найденного игрока. Ник канонизируем
+ * по известным (users + список допущенных + история записей), клан — игрока,
+ * иначе клан отправителя. Повтор за тот же день перезаписывает запись игрока. */
+async function processAlbum(uid, chatId, items) {
+  const lang = data.users[uid]?.lang || 'ru';
+  const sub = submitterOf(uid);
+  const senderNick = sub?.nick || data.users[uid]?.nick || null;
+  const senderClan = (sub?.clan && CLANS[sub.clan] ? sub.clan : null)
+    || (data.users[uid]?.clan && CLANS[data.users[uid].clan] ? data.users[uid].clan : null)
+    || 'unity2';
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-zа-я0-9]/g, '');
+  const knownNicks = [];
+  for (const u of Object.values(data.users)) if (u.nick) knownNicks.push(u.nick);
+  for (const s of config.submitters) if (s.nick) knownNicks.push(s.nick);
+  for (const e of data.entries) if (!e.demo && e.nick) knownNicks.push(e.nick);
+  const clanByNick = new Map(); // norm(ник) → клан; более свежий источник перебивает
+  for (const e of data.entries) if (!e.demo && e.nick && e.clan) clanByNick.set(norm(e.nick), e.clan);
+  for (const s of config.submitters) if (s.nick && s.clan) clanByNick.set(norm(s.nick), s.clan);
+  for (const u of Object.values(data.users)) if (u.nick && u.clan) clanByNick.set(norm(u.nick), u.clan);
+
+  const recorded = new Map(); // norm(ник) → что в итоге записано (для ответа)
+  let failed = 0;
+  for (const it of items) {
+    const proof = await downloadProof(it.fileId, it.msgId);
+    let rows = null;
+    if (proof) {
+      try { rows = await ocrBoard(path.join(ROOT, 'docs', proof)); } catch (e) { console.error('ocr board:', e.message); }
+    }
+    if (proof && senderNick) {
+      // строка самого отправителя: ocrOwnRow читает её надёжнее всего (узкие
+      // полосы ×5 у нижнего края кадра) — её значение гарантировано поверх доски
+      let own = null;
+      try { own = await ocrOwnRow(path.join(ROOT, 'docs', proof), senderNick); } catch (e) { console.error('ocr own:', e.message); }
+      if (own) {
+        rows = (rows || []).filter((r) => matchNick(r.nickRaw, [senderNick]) !== senderNick);
+        rows.push({ nickRaw: senderNick, dmg: own.dmg, raw: own.raw, y: 1e9 }); // закреплённая строка — низ
+      }
+    }
+    if (!rows || !rows.length) { failed++; continue; }
+    const ts = it.date || Math.floor(Date.now() / 1000);
+    const date = gameDate(ts);
+    for (const r of rows) {
+      const nick = matchNick(r.nickRaw, knownNicks) || r.nickRaw;
+      const clan = clanByNick.get(norm(nick)) || senderClan;
+      data.entries = data.entries.filter((e) => !(e.nick === nick && e.date === date && e.clan === clan && !e.demo));
+      data.entries.push({
+        id: String(it.msgId), via: uid, grp: it.grp, nick, date, dmg: r.dmg, raw: r.raw, ts, clan,
+        ...(proof ? { proof } : {}),
+      });
+      recorded.set(norm(nick), { nick, dmg: r.dmg, raw: r.raw, clan });
+    }
+    saveData(); // после каждого скрина: краш не должен съедать весь альбом
+  }
+
+  delete data.state[uid];
+  if (!recorded.size) {
+    send(chatId, t(lang, 'albumFail'));
+    return;
+  }
+  let text = t(lang, 'albumHead', { done: items.length - failed, total: items.length, players: recorded.size });
+  for (const r of recorded.values()) {
+    text += '\n' + t(lang, 'albumRow', { nick: r.nick, dmg: r.raw || fmtDmg(r.dmg), clan: CLANS[r.clan] || 'Unity2' });
+  }
+  if (failed) text += '\n\n' + t(lang, 'albumMiss', { n: failed });
+  text += '\n\n' + t(lang, 'commandsList');
+  send(chatId, text);
+}
+
 /* кнопки: выбор клана (clan:*) и языка (lang:*); на нажатия старых «Записать» —
  * перенаправляем на новый сценарий */
 async function handleCallback(q) {
@@ -439,6 +580,7 @@ async function handleMessage(msg) {
   const uid = String(msg.from.id);
   const group = msg.chat.type !== 'private';
   const st = data.state[uid] || {};
+  const sub = submitterOf(uid);
 
   // автоопределение языка от Telegram: запоминаем один раз, молча (меняется через /lang)
   const lang = pickLang(uid, msg.from);
@@ -447,6 +589,29 @@ async function handleMessage(msg) {
   }
   const meta = { tgUsername: msg.from.username || null, first: msg.from.first_name || null };
   if (data.users[uid]) Object.assign(data.users[uid], meta);
+
+  // доступ: скрины и команды — только от админов и допущенных игроков
+  // (docs/config.json, правится в админке на сайте). Чужим — короткий отказ
+  // не чаще раза в 12 ч (в группе молча), админам — уведомление с ID раз в сутки
+  if (!isAllowed(uid)) {
+    const now = Math.floor(Date.now() / 1000);
+    const d = data.denied[uid] || {};
+    if (!group && now - (d.replyTs || 0) > 12 * 3600) {
+      send(msg.chat.id, t(lang, 'denied'));
+      d.replyTs = now;
+    }
+    if (now - (d.notifyTs || 0) > 24 * 3600) {
+      const who = [
+        data.users[uid]?.nick ? `«${data.users[uid].nick}»` : null,
+        msg.from.first_name || null,
+        msg.from.username ? '@' + msg.from.username : null,
+      ].filter(Boolean).join(' · ');
+      notifyAdmins(t('ru', 'adminRequest', { who: who || '—', id: uid, url: `${SITE_URL}admin.html` }));
+      d.notifyTs = now;
+    }
+    data.denied[uid] = d;
+    return;
+  }
 
   if (msg.text && msg.text.startsWith('/')) {
     if (group) return; // команды и диалог регистрации — в личке, в общем чате не шумим
@@ -475,8 +640,13 @@ async function handleMessage(msg) {
   }
 
   // игроки разошлись по разным кланам: с CLAN_ASK_FROM каждый игрок при первом
-  // фото уточняет клан один раз; скрин удерживаем и распознаём сразу после ответа
-  if (data.users[uid] && needClanCheck(uid) && st.await !== 'clan') {
+  // фото уточняет клан один раз; скрин удерживаем и распознаём сразу после ответа.
+  // Допущенному отправителю клан известен из списка — молча проставляем
+  if (sub?.clan && data.users[uid] && needClanCheck(uid)) {
+    data.users[uid].clan = sub.clan;
+    data.users[uid].clanCheck = gameDate(Date.now() / 1000);
+  }
+  if (data.users[uid] && needClanCheck(uid) && st.await !== 'clan' && !sub?.clan) {
     data.state[uid] = { await: 'clan', reask: true, ...(fileId ? { fileId, msgId: msg.message_id, msgDate: msg.date } : {}) };
     askClan(msg.chat.id, lang, true);
     return;
@@ -488,23 +658,12 @@ async function handleMessage(msg) {
   }
 
   if (fileId) {
-    if (!data.users[uid]) {
-      if (group && msg.from.username) {
-        data.users[uid] = { nick: msg.from.username, joined: new Date().toISOString(), lang, ...meta };
-        send(msg.chat.id, t(lang, 'groupAutoreg', { username: msg.from.username }));
-        data.state[uid] = { await: 'clan', fileId, msgId: msg.message_id, msgDate: msg.date };
-        askClan(msg.chat.id, lang);
-        return;
-      } else if (group) {
-        send(msg.chat.id, t(lang, 'groupRegister'));
-        return;
-      } else {
-        data.state[uid] = { await: 'nick', fileId };
-        send(msg.chat.id, t(lang, 'askNick'));
-        return;
-      }
+    // урон пишем со всего списка рейтинга на скрине; альбом копим и жмём одной пачкой
+    if (msg.media_group_id) {
+      bufferPhoto(uid, msg.chat.id, msg.media_group_id, fileId, msg.message_id, msg.date);
+      return;
     }
-    await processPhoto(uid, msg.chat.id, fileId, msg.message_id, msg.date);
+    await processAlbum(uid, msg.chat.id, [{ fileId, msgId: msg.message_id, date: msg.date, grp: 'm' + msg.message_id }]);
     return;
   }
 
@@ -532,6 +691,22 @@ async function handleMessage(msg) {
 }
 
 // ---------- запуск: разовый (Actions) или непрерывный (VPS, BOT_LOOP=1) ----------
+/* применить пачку апдейтов: общий цикл для разового и непрерывного режима */
+async function applyUpdates(updates) {
+  let n = 0;
+  for (const u of updates) {
+    try {
+      if (u.message || u.channel_post) await handleMessage(u.message || u.channel_post);
+      else if (u.callback_query) await handleCallback(u.callback_query);
+      n++;
+    }
+    catch (e) { console.error('update error:', u.update_id, e.message); }
+    data.offset = Math.max(data.offset, u.update_id + 1);
+    saveData(); // сохраняем после каждого апдейта, чтобы не обрабатывать дважды
+  }
+  return n;
+}
+
 async function main() {
   pruneProofs(); // пруфы старше 7 дней — в начале запуска
   let processed = 0;
@@ -558,17 +733,9 @@ async function main() {
     }
     nullStreak = 0;
     if (!updates.length) break;
-    for (const u of updates) {
-      try {
-        if (u.message || u.channel_post) await handleMessage(u.message || u.channel_post);
-        else if (u.callback_query) await handleCallback(u.callback_query);
-      }
-      catch (e) { console.error('update error:', u.update_id, e.message); }
-      data.offset = Math.max(data.offset, u.update_id + 1);
-      processed++;
-      saveData(); // сохраняем после каждого апдейта, чтобы не обрабатывать дважды
-    }
+    processed += await applyUpdates(updates);
   }
+  await flushGroups(); // недообработанные альбомы — до выхода
   if (processed) console.log(`Обработано апдейтов: ${processed}, записей всего: ${data.entries.filter((e) => !e.demo).length}`);
   if (snapshot() !== initialSnapshot) saveData();
   else console.log('Новых сообщений нет, данные не менялись — коммита не будет.');
@@ -590,7 +757,17 @@ async function pushData() {
     if (spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: ROOT }).status === 0) return; // нечего коммитить
     if (!git(['commit', '-m', 'data: update from telegram bot'])) return;
     for (let i = 0; i < 3 && !git(['push']); i++) git(['pull', '--rebase', 'origin', 'main']);
+    await syncConfig();
   } finally { pushing = false; }
+}
+
+/* подтянуть чужие коммиты (админка на сайте пишет config.json через GitHub API)
+ * и перечитать конфиг; только при чистом рабочем дереве — rebase не должен
+ * спотыкаться о несохранённые данные. Грязное дерево — просто повторим позже */
+async function syncConfig() {
+  if (spawnSync('git', ['diff', '--quiet'], { cwd: ROOT }).status !== 0) return;
+  if (!git(['pull', '--rebase', 'origin', 'main'])) return;
+  loadConfig();
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -599,6 +776,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function loop() {
   console.log(`[bot] непрерывный опрос запущен (${new Date().toISOString()}, TZ=${TZ})`);
   let lastPruneDay = '';
+  let lastConfigSync = 0;
   for (;;) {
     // раз в сутки (по игровому дню, т.е. в 03:00) — чистка пруфов старше 7 дней
     const day = gameDate(Date.now() / 1000);
@@ -607,6 +785,11 @@ async function loop() {
       const before = snapshot();
       pruneProofs();
       if (snapshot() !== before) { saveData(); await pushData(); }
+    }
+    // раз в 10 минут — коммиты админки (config.json) и перечитывание конфига
+    if (Date.now() - lastConfigSync > 10 * 60e3) {
+      lastConfigSync = Date.now();
+      await syncConfig();
     }
     let updates = null;
     try {
@@ -622,15 +805,12 @@ async function loop() {
       continue;
     }
     if (!updates.length) continue;
-    let n = 0;
-    for (const u of updates) {
-      try {
-        if (u.message || u.channel_post) await handleMessage(u.message || u.channel_post);
-        else if (u.callback_query) await handleCallback(u.callback_query);
-        n++;
-      } catch (e) { console.error('[bot] update error:', u.update_id, e.message); }
-      data.offset = Math.max(data.offset, u.update_id + 1);
-      saveData();
+    let n = await applyUpdates(updates);
+    if (pendingGroups.size) {
+      // хвост альбома мог разорваться между пачками — добираем сразу одним запросом
+      const extra = await tg('getUpdates', { offset: data.offset, timeout: 0, allowed_updates: ['message', 'callback_query', 'channel_post'] });
+      if (extra && extra.length) n += await applyUpdates(extra);
+      await flushGroups();
     }
     console.log(`[bot] обработано ${n}, записей всего: ${data.entries.filter((e) => !e.demo).length}`);
     await pushData();

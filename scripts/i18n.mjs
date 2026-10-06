@@ -74,6 +74,37 @@ export const MESSAGES = {
     ru: 'Сначала /start',
     en: 'Run /start first',
   },
+  /* доступ: скрины принимаются только от игроков, добавленных админом (сайт → админка) */
+  denied: {
+    ru: 'Доступ закрыт 🔒 Скриншоты принимаю только от игроков, которых добавил админ.\nПопроси админа добавить тебя в список, потом присылай скрины.',
+    en: 'Access is closed 🔒 I only accept screenshots from players added by the admin.\nAsk the admin to add you to the list, then send screenshots.',
+  },
+  /* уведомление админам о постучавшемся незнакомце (id нужен для добавления в админке) */
+  adminRequest: {
+    ru: '📬 Запрос доступа к боту\nОт: {who}\nID: {id}\n\nДобавить: админка на сайте — {url}',
+    en: '📬 Access request for the bot\nFrom: {who}\nID: {id}\n\nTo add: admin panel on the site — {url}',
+  },
+  /* итог обработки альбома скринов */
+  albumHead: {
+    ru: '✅ Скринов: {done} из {total}, игроков записано: {players}',
+    en: '✅ Screenshots: {done} of {total}, players recorded: {players}',
+  },
+  albumRow: {
+    ru: '• {nick} — {dmg} ({clan})',
+    en: '• {nick} — {dmg} ({clan})',
+  },
+  albumMiss: {
+    ru: '⚠️ Не удалось распознать скринов: {n}',
+    en: '⚠️ Failed to recognize screenshots: {n}',
+  },
+  albumFail: {
+    ru: 'Не смог ничего разобрать 🤔 Пришли скрины чётче и покрупнее: весь экран рейтинга, без обрезки краёв.',
+    en: "Couldn't read anything 🤔 Send the screenshots sharper and bigger: the full rating screen, with no edges cut off.",
+  },
+  undoAlbumDone: {
+    ru: 'Удалил последнюю отправку: {n} записей за {date}',
+    en: 'Deleted the last submission: {n} entries for {date}',
+  },
   /* /bug без текста — ждём описание или пересланное сообщение бота с ошибкой */
   bugAsk: {
     ru: 'Опиши проблему одним сообщением: что произошло и что ожидал.\nИли просто перешли сюда моё сообщение с ошибкой.',
@@ -183,8 +214,11 @@ export const MESSAGES = {
       '/bug описание — сообщить о проблеме (или /bug и переслать моё сообщение с ошибкой)',
       '',
       'Как отметиться:',
-      'отправь скриншот рейтинга — я сам распознаю и запишу твой урон',
+      'отправь скриншот рейтинга — я сам распознаю и запишу урон',
+      'всех игроков со скрина (можно сразу альбомом из нескольких картинок);',
       '(не разберу — попрошу скрин получше; ошибся — /undo и новый скрин)',
+      '',
+      'Скрины принимаю только от игроков, добавленных админом (админка на сайте).',
       '',
       'Сайт: {url}',
     ].join('\n'),
@@ -194,13 +228,16 @@ export const MESSAGES = {
       '/nick NewNick — change nickname',
       '/clan — set or change clan (Unity / Unity2)',
       '/lang — bot language (Russian / English)',
-      '/undo — delete my last entry',
+      '/undo — delete my last entry (or the whole last album)',
       '/stats — my entries for the last 7 days',
       '/bug description — report a problem (or /bug and forward my message with the error)',
       '',
       'How to report:',
-      "send a rating screenshot — I'll recognize and record your damage myself",
+      "send a rating screenshot — I'll recognize and record the damage",
+      'of every player on it (several pictures as one album work too);',
       "(if I can't read it, I'll ask for a clearer one; made a mistake — /undo and a new screenshot)",
+      '',
+      'Screenshots are accepted only from players added by the admin (admin panel on the site).',
       '',
       'Site: {url}',
     ].join('\n'),

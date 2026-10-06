@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Админка · Unity &amp; Unity2 — Календарь урона</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏹</text></svg>">
+<link rel="stylesheet" href="style.css?v=11">
+<style>
+  /* локальные стили админки; базовая тема — style.css */
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  .row input, .row select {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font: inherit;
+    min-width: 130px;
+  }
+  .row input:focus, .row select:focus { outline: none; border-color: var(--accent); }
+  .row button, .chip-list button, td button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .row button:hover, td button:hover { border-color: var(--accent); color: var(--accent); }
+  .row button.primary { border-color: var(--accent); color: var(--accent); }
+  .row button.ghost-btn, td button.ghost-btn { font-weight: 400; color: var(--muted); }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .admin-table th {
+    text-align: left; color: var(--muted); font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .5px; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  .admin-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  .admin-table td.num { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .chip-list { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 10px 0; }
+  .chip-list li {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; display: inline-flex; gap: 8px; align-items: center;
+  }
+  .chip-list li b { color: var(--accent); }
+  .chip-list button { padding: 0 6px; border-radius: 999px; font-size: 12px; }
+  .panel h3 { margin: 18px 0 4px; font-size: 14px; color: var(--text); }
+  details.hint { margin: 8px 0; }
+  details.hint summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  details.hint ol { margin: 8px 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+  .status-ok { color: var(--good); }
+  .status-err { color: #ff7a7a; }
+  #token-status, #save-status { min-height: 18px; }
+  .back-link { text-align: center; margin-top: 8px; }
+  .back-link a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">🏹 <span>Админка</span> · <b>Unity</b> &amp; <b>Unity2</b></div>
+  <div class="sub">кому бот принимает скрины урона</div>
+  <div class="updated" id="gh-user"></div>
+</header>
+
+<main>
+  <!-- Шаг 1: токен GitHub — без него страница может только смотреть -->
+  <section class="panel" id="token-panel">
+    <h2>Шаг 1 · Токен GitHub</h2>
+    <p class="hint">Сайт статический, поэтому список сохраняется прямо в репозиторий через GitHub API.
+      Нужен токен с правом «Contents: Read and write» только для этого репозитория.</p>
+    <details class="hint">
+      <summary>Как создать токен (один раз, ~минута)</summary>
+      <ol>
+        <li>GitHub → <b>Settings</b> → Developer settings → <b>Fine-grained tokens</b> → Generate new token</li>
+        <li>Repository access → <b>Only select repositories</b> → <code>Zaytsevandrei/archero2Dashboard</code></li>
+        <li>Permissions → Repository permissions → <b>Contents</b> → Read and write</li>
+        <li>Скопируй токен (github_pat_…), вставь ниже — он останется только в этом браузере</li>
+      </ol>
+    </details>
+    <div class="row">
+      <input id="token-input" type="password" placeholder="github_pat_…" style="flex:1; min-width:220px" autocomplete="off">
+      <button id="token-save" class="primary">Сохранить</button>
+      <button id="token-drop" class="ghost-btn">Стереть</button>
+    </div>
+    <div id="token-status" class="hint"></div>
+  </section>
+
+  <!-- Шаг 2: список допущенных -->
+  <section class="panel" id="list-panel" hidden>
+    <h2>Допущенные игроки</h2>
+    <p class="hint">Скриншоты бота принимают только админы и игроки из этого списка (можно альбомом из
+      нескольких картинок — бот запишет всех игроков со скрина). Клан используется для записей,
+      у которых клан игрока определить не удалось. Бот подхватывает изменения в течение ~10 минут.<br>
+      💡 Админу, который сам присылает скрины, добавь себя и в этот список — с нужным кланом.</p>
+    <table class="admin-table">
+      <thead><tr><th>Ник</th><th>Telegram ID</th><th>Username</th><th>Клан</th><th>Добавлен</th><th></th></tr></thead>
+      <tbody id="submitters-body"></tbody>
+    </table>
+    <h3>Добавить игрока</h3>
+    <form id="add-form" class="row">
+      <input id="add-nick" placeholder="Ник *" required maxlength="24">
+      <input id="add-tgid" placeholder="Telegram ID *" required inputmode="numeric" pattern="\d{3,12}" title="Только цифры">
+      <input id="add-username" placeholder="@username" maxlength="32">
+      <select id="add-clan">
+        <option value="unity">Unity</option>
+        <option value="unity2">Unity2</option>
+      </select>
+      <button type="submit" class="primary">Добавить</button>
+    </form>
+    <div id="save-status" class="hint"></div>
+  </section>
+
+  <!-- Помощник: известные боту игроки, чтобы не искать ID руками -->
+  <section class="panel" id="users-panel" hidden>
+    <h2>Известные боту игроки</h2>
+    <p class="hint">Все, кто уже отмечался боту. «→» подставляет игрока в форму добавления.</p>
+    <div class="row"><input id="users-filter" placeholder="Поиск по нику / username…" style="flex:1; min-width:200px"></div>
+    <table class="admin-table">
+      <thead><tr><th>Ник</th><th>Telegram ID</th><th>Username</th><th>Клан</th><th></th></tr></thead>
+      <tbody id="users-body"></tbody>
+    </table>
+  </section>
+
+  <!-- Админы: уведомления о запросах доступа и /bug -->
+  <section class="panel" id="admins-panel" hidden>
+    <h2>Админы</h2>
+    <p class="hint">Получают уведомления о запросах доступа и жалобах /bug. Владелец — всегда админ.</p>
+    <ul id="admins-list" class="chip-list"></ul>
+    <form id="admin-add-form" class="row">
+      <input id="admin-add-id" placeholder="Telegram ID" inputmode="numeric" pattern="\d{3,12}">
+      <button type="submit">Добавить админа</button>
+    </form>
+  </section>
+
+  <p class="hint back-link">← <a href="index.html">на календарь</a></p>
+</main>
+
+<script src="admin.js?v=1"></script>
+</body>
+</html>

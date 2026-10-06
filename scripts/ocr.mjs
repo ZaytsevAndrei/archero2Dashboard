@@ -1,8 +1,11 @@
 /**
  * OCR скриншота рейтинга (Archero 2, Вторжение монстров).
- * Ищем строку зарегистрированного ника и урон в ней.
- * Возвращает { dmg, raw } или null. Зависимости (tesseract.js, jimp) опциональны:
- * если не установлены — модуль просто недоступен, бот уйдёт в ручной ввод.
+ * ocrOwnRow — строка конкретного зарегистрированного ника → { dmg, raw } | null.
+ * ocrBoard — все строки рейтинга «ник + урон» (альбомы: один скрин закрывает
+ * нескольких игроков) → [{ nickRaw, dmg, raw, y }] | null.
+ * matchNick — канонизация распознанного ника по списку известных.
+ * Зависимости (tesseract.js, jimp) опциональны: если не установлены — модуль
+ * просто недоступен, бот уйдёт в ручной ввод.
  */
 import { existsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
@@ -67,43 +70,106 @@ function groupLines(words) {
   return lines;
 }
 
-/* поиск строки с ником и уроном; nick — зарегистрированный ник игрока */
-export async function ocrOwnRow(imagePath, nick) {
-  if (!Jimp || !createWorker) return null;
-  if (!existsSync(imagePath)) return null;
-  let img;
-  try { img = await Jimp.read(imagePath); } catch { return null; }
-  const { width, height } = img.bitmap;
+/* срезать мусор по краям токена вида «+¥DonMaxone» */
+const clean = (t) => t.replace(/^[^A-Za-zА-Яа-я0-9]+|[^A-Za-zА-Яа-я0-9]+$/g, '');
 
-  // зона рейтинга: почти весь экран (8%–97% по высоте, без боковых кропов) —
-  // своя строка может быть и последней видимой внизу, её подрезать нельзя.
-  // Масштаб ×3: ×2 заметно теряет мелкие цифры урона на плашках.
-  const CROP_TOP = Math.floor(height * 0.08), SCALE = 3;
+/* гомоглифы: OCR в рус+eng читает латинские ники кириллицей («ipunany» →
+   «ипапу») и наоборот — перед нечётким сравнением складываем в один вид */
+const FOLD = { а: 'a', в: 'b', с: 'c', е: 'e', к: 'k', м: 'm', н: 'h', о: 'o', р: 'p', т: 't', у: 'y', х: 'x', и: 'u', п: 'n' };
+const fold = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, (ch) => FOLD[ch] || '');
+
+/* первый токен-урон в наборе токенов: { d, idx } | null (idx — позиция в наборе).
+   «698.98 В» — суффикс иногда отрывается от числа пробелом: сначала пробуем
+   склеить число с коротким соседним токеном-суффиксом, потом токен как есть */
+function dmgOfIdx(toks) {
+  for (let i = 0; i < toks.length; i++) {
+    if (/^\d{1,4}[.,]\d{2}$/.test(toks[i]) && i + 1 < toks.length && /^[BbВвБ8TТт7MmМKkК1%]$/.test(toks[i + 1])) {
+      const glued = parseDamageToken(toks[i] + toks[i + 1]);
+      if (glued) return { d: glued, idx: i };
+    }
+    const d = parseDamageToken(toks[i]);
+    if (d) return { d, idx: i };
+  }
+  return null;
+}
+const dmgOf = (toks) => dmgOfIdx(toks)?.d || null;
+
+async function makeWorker() {
+  // rus подключаем, если модель лежит в tessdata (кириллические ники)
+  const langs = existsSync(path.join(TESSDATA_DIR, 'rus.traineddata')) ? 'eng+rus' : 'eng';
+  return createWorker(langs, 1, {
+    langPath: TESSDATA_DIR, // данные языка лежат в репо — без скачивания
+    cacheMethod: 'none',
+    gzip: false,
+  });
+}
+
+/* основной проход по всему кадру: зона рейтинга — почти весь экран
+   (8%–97% высоты, без боковых кропов: своя строка может быть и последней
+   видимой внизу, её подрезать нельзя; toBottom=true — до 100%, для прохода
+   ×5, где выживают обрезанные краем строки). Масштаб ×3: ×2 заметно теряет
+   мелкие цифры урона на плашках (×5 — контрольный проход для тёмных строк);
+   psm — режим сегментации (по умолчанию авто). → слова → визуальные строки */
+async function mainPass(img, imagePath, worker, { scale = 3, psm = null, toBottom = false, label = 'ocr' } = {}) {
+  const { width, height } = img.bitmap;
+  const CROP_TOP = Math.floor(height * 0.08), SCALE = scale;
   const list = img.clone().crop({
-    x: 0, y: CROP_TOP, w: width, h: Math.ceil(height * 0.89),
+    x: 0, y: CROP_TOP, w: width, h: toBottom ? height - CROP_TOP : Math.ceil(height * 0.89),
   });
   list.resize({ w: width * SCALE });
   list.greyscale();
 
   const tmp = imagePath + '.list.png';
   await list.write(tmp);
-  // rus подключаем, если модель лежит в tessdata (кириллические ники)
-  const langs = existsSync(path.join(TESSDATA_DIR, 'rus.traineddata')) ? 'eng+rus' : 'eng';
-  const worker = await createWorker(langs, 1, {
-    langPath: TESSDATA_DIR, // данные языка лежат в репо — без скачивания
-    cacheMethod: 'none',
-    gzip: false,
-  });
   try {
+    if (psm) await worker.setParameters({ tessedit_pageseg_mode: psm });
     const { data } = await worker.recognize(tmp, {}, { blocks: true });
-    try { unlinkSync(tmp); } catch {} // временный кроп не должен попасть в коммит
     const words = [];
     for (const b of data.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || []) {
       words.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
     }
     const lines = groupLines(words);
-    if (process.env.OCR_DEBUG === '2') for (const l of lines) console.error(`[ocr] y=${l.y}: ${l.words.map((w) => `${w.text}@${w.x}`).join(' | ')}`);
-    const clean = (t) => t.replace(/^[^A-Za-zА-Яа-я0-9]+|[^A-Za-zА-Яа-я0-9]+$/g, ''); // срезать мусор вида «+¥DonMaxone»
+    if (process.env.OCR_DEBUG === '2') for (const l of lines) console.error(`[${label}] y=${l.y}: ${l.words.map((w) => `${w.text}@${w.x}`).join(' | ')}`);
+    return { lines, CROP_TOP, SCALE, width, height };
+  } finally {
+    try { unlinkSync(tmp); } catch {} // временный кроп не должен попасть в коммит
+  }
+}
+
+/* повторное чтение полосы кадра ×5 в двух режимах сегментации (PSM 7 «одна
+   строка» и PSM 11 «разреженный текст») → [{ psm, lines, text }].
+   Основной проход ×3 теряет урон в строках, обрезанных нижним краем кадра
+   (свою строку игроки часто ловят у самого низа списка) */
+async function ocrStrips(img, imagePath, worker, x0, y0, y1) {
+  const width = img.bitmap.width;
+  const strip = img.clone().crop({ x: x0, y: y0, w: width - x0, h: y1 - y0 });
+  strip.resize({ w: strip.bitmap.width * 5 });
+  strip.greyscale();
+  const tmp2 = imagePath + '.row.png';
+  await strip.write(tmp2);
+  try {
+    const out = [];
+    for (const psm of ['7', '11']) {
+      await worker.setParameters({ tessedit_pageseg_mode: psm });
+      const { data: d2 } = await worker.recognize(tmp2, {}, { blocks: true });
+      const words2 = [];
+      for (const b of d2.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || [])
+        words2.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
+      out.push({ psm, lines: groupLines(words2), text: d2.text });
+    }
+    return out;
+  } finally { try { unlinkSync(tmp2); } catch {} }
+}
+
+/* поиск строки с ником и уроном; nick — зарегистрированный ник игрока */
+export async function ocrOwnRow(imagePath, nick) {
+  if (!Jimp || !createWorker) return null;
+  if (!existsSync(imagePath)) return null;
+  let img;
+  try { img = await Jimp.read(imagePath); } catch { return null; }
+  const worker = await makeWorker();
+  try {
+    const { lines, CROP_TOP, SCALE, width, height } = await mainPass(img, imagePath, worker);
     const nickRe = /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/;
     const isNick = (t) => { const c = clean(t); return nickRe.test(c) && lev(c.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34); };
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
@@ -118,41 +184,9 @@ export async function ocrOwnRow(imagePath, nick) {
       return l.words.filter((w, i) => i >= from && w.x >= nw.x - X_TOL).map((w) => w.text);
     };
     const toksRight = (l, nw) => (l ? l.words.filter((w) => w.x >= nw.x - X_TOL).map((w) => w.text) : []);
-    /* «698.98 В» — суффикс иногда отрывается от числа пробелом: сначала пробуем
-       склеить число с коротким соседним токеном-суффиксом, потом токен как есть */
-    const dmgOf = (toks) => {
-      for (let i = 0; i < toks.length; i++) {
-        if (/^\d{1,4}[.,]\d{2}$/.test(toks[i]) && i + 1 < toks.length && /^[BbВвБ8TТт7MmМKkК1%]$/.test(toks[i + 1])) {
-          const glued = parseDamageToken(toks[i] + toks[i + 1]);
-          if (glued) return glued;
-        }
-        const d = parseDamageToken(toks[i]);
-        if (d) return d;
-      }
-      return null;
-    };
 
-    /* полоса кадра ×5, распознанная в двух режимах сегментации (PSM 7 «одна
-       строка» и PSM 11 «разреженный текст») → [{psm, lines, text}] */
-    async function ocrStrip(x0, y0, y1) {
-      const strip = img.clone().crop({ x: x0, y: y0, w: width - x0, h: y1 - y0 });
-      strip.resize({ w: strip.bitmap.width * 5 });
-      strip.greyscale();
-      const tmp2 = imagePath + '.row.png';
-      await strip.write(tmp2);
-      try {
-        const out = [];
-        for (const psm of ['7', '11']) {
-          await worker.setParameters({ tessedit_pageseg_mode: psm });
-          const { data: d2 } = await worker.recognize(tmp2, {}, { blocks: true });
-          const words2 = [];
-          for (const b of d2.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || [])
-            words2.push({ text: w.text, x: w.bbox.x0, y: w.bbox.y0, h: w.bbox.y1 - w.bbox.y0 });
-          out.push({ psm, lines: groupLines(words2), text: d2.text });
-        }
-        return out;
-      } finally { try { unlinkSync(tmp2); } catch {} }
-    }
+    /* полоса кадра ×5 в двух режимах сегментации — общая с ocrBoard */
+    const ocrStrip = (x0, y0, y1) => ocrStrips(img, imagePath, worker, x0, y0, y1);
 
     /* повторный проход по строке ника: кроп из исходника вокруг неё, ×5, PSM «одна
        строка» — основной проход ×3 теряет урон в строке, обрезанной нижним краем
@@ -231,6 +265,140 @@ export async function ocrOwnRow(imagePath, nick) {
     const alt = rows.slice(1).sort((a, b) => b.d.dmg - a.d.dmg)[0];
     if (alt && best.d.dmg * 4 < alt.d.dmg) best = alt;
     return best.d;
+  } finally {
+    await worker.terminate();
+  }
+}
+
+/* канонизация распознанного ника по списку известных: точное нормализованное
+   совпадение, затем нечёткое (порог как у isNick — расстояние Левенштейна).
+   Если под порог попали два разных известных ника с равным расстоянием —
+   никого не выбираем: ошибка в записи хуже пропуска канонизации */
+export function matchNick(raw, knownNicks) {
+  const target = fold(raw);
+  if (!target) return null;
+  const byNorm = new Map(); // fold(ник) → исходный ник (первый с такой свёрткой)
+  for (const n of knownNicks) {
+    const k = fold(n);
+    if (k && !byNorm.has(k)) byNorm.set(k, n);
+  }
+  if (byNorm.has(target)) return byNorm.get(target);
+  const cands = [...byNorm.keys()]
+    .map((k) => ({ k, d: lev(k, target) }))
+    .filter((c) => c.d <= Math.max(2, c.k.length * 0.34))
+    .sort((a, b) => a.d - b.d);
+  if (!cands.length || (cands.length > 1 && cands[0].d === cands[1].d)) return null;
+  return byNorm.get(cands[0].k);
+}
+
+/* служебные надписи рейтинга, которые легко принять за ник («общий урон»,
+   «Sezon/Sesion» — скрины бывают на турецком и других языках) */
+const BOARD_JUNK = new Set([
+  'общийурон', 'общий', 'урон', 'гильдии', 'уронгильдии', 'общ', 'босс', 'boss',
+  'damage', 'total', 'totaldamage', 'guild', 'rank', 'награда', 'reward',
+  'lonca', 'sezon', 'sesion', 'season', 'сезон',
+]);
+
+/* все токены-урон в наборе (со склейкой оторванного суффикса): [{ d, idx }] */
+function allDmg(toks) {
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    if (/^\d{1,4}[.,]\d{2}$/.test(toks[i]) && i + 1 < toks.length && /^[BbВвБ8TТт7MmМKkК1%]$/.test(toks[i + 1])) {
+      const glued = parseDamageToken(toks[i] + toks[i + 1]);
+      if (glued) { out.push({ d: glued, idx: i }); i++; continue; }
+    }
+    const d = parseDamageToken(toks[i]);
+    if (d) out.push({ d, idx: i });
+  }
+  return out;
+}
+
+/* все строки рейтинга со скрина. Один скрин закрывает несколько игроков
+ * гильдии (альбомы от допущенных отправителей). Два прохода и слияние:
+ *  - A: ×3, авто-сегментация — основной (как в ocrOwnRow);
+ *  - B: ×5, PSM 11 «разреженный текст», кроп до низа кадра — читает тёмные
+ *    и обрезанные краем строки (закреплённая строка владельца скрина).
+ * Строка A рядом по y со строкей B считается ошибочным чтением той же строки
+ * и отбрасывается (B читает лучше). Правила строки: урон = самое правое число
+ * (левее бывают колонки ранга/очков), ник = буквы левее него; нет чисел —
+ * ровно один похожий на ник токен + число строкой ниже правее него. Подиум
+ * топ-3 (несколько имён и чисел в одной строке) не сопоставить — пропускаем.
+ * Возвращает [{ nickRaw, dmg, raw, y }] сверху вниз или null */
+export async function ocrBoard(imagePath) {
+  if (!Jimp || !createWorker) return null;
+  if (!existsSync(imagePath)) return null;
+  let img;
+  try { img = await Jimp.read(imagePath); } catch { return null; }
+  const worker = await makeWorker();
+  try {
+    const passA = await mainPass(img, imagePath, worker, { label: 'ocr:A' });
+    const passB = await mainPass(img, imagePath, worker, { scale: 5, psm: '11', toBottom: true, label: 'ocr:B' });
+    /* правила разбора одного набора строк; yMul/yEps приводят координаты
+       прохода B (×5) к масштабу A (×3), с крошечным сдвигом вниз — при
+       равенстве победит более свежее чтение B */
+    const rowsOf = (ls, yMul = 1, yEps = 0) => {
+      const out = [];
+      const XT = Math.round(40 / yMul); // допуск «урон правее ника» в координатах этого прохода
+      const push = (name, d, y) => {
+        if (name.length < 3 || name.length > 24) return; // игровые ники — от 3 символов
+        if (BOARD_JUNK.has(fold(name))) return;
+        out.push({ nickRaw: name, dmg: d.dmg, raw: d.raw, y: y * yMul + yEps });
+      };
+      for (let i = 0; i < ls.length; i++) {
+        const l = ls[i];
+        const hits = allDmg(l.words.map((w) => w.text));
+        if (hits.length) {
+          const right = hits.reduce((a, b) => (l.words[b.idx].x >= l.words[a.idx].x ? b : a));
+          const names = l.words.slice(0, right.idx)
+            .map((w) => clean(w.text))
+            .filter((t) => /[A-Za-zА-Яа-я]/.test(t));
+          // подиум топ-3: несколько имён и несколько чисел не сопоставить по строке
+          if (names.length >= 2 && hits.length >= 2) continue;
+          push(names.join(''), right.d, l.y);
+          if (process.env.OCR_DEBUG) console.error(`[ocr:board] y=${Math.round(l.y * yMul + yEps)}: «${l.words.map((w) => w.text).join(' ')}» → ${names.join('')} ${right.d.raw}`);
+          continue;
+        }
+        // строка без чисел: ровно один похожий на ник токен + урон строкой ниже
+        // правее него — так читается большинство строк списка
+        const nameWords = l.words.filter((w) => /^[A-Za-zА-Яа-я][A-Za-zА-Яа-я0-9_.-]{2,15}$/.test(clean(w.text)));
+        if (nameWords.length !== 1) continue;
+        const below = ls[i + 1];
+        if (!below) continue;
+        const candWords = below.words.filter((w) => w.x >= nameWords[0].x - XT);
+        const candHits = allDmg(candWords.map((w) => w.text));
+        if (!candHits.length) continue;
+        const right = candHits.reduce((a, b) => (candWords[b.idx].x >= candWords[a.idx].x ? b : a));
+        // урон не должен иметь букв левее себя в нижней строке — иначе это чужая
+        // строка «ник + урон», а не число нашего игрока
+        if (candWords.slice(0, right.idx).some((w) => /[A-Za-zА-Яа-я]/.test(clean(w.text)))) continue;
+        push(clean(nameWords[0].text), right.d, l.y);
+        if (process.env.OCR_DEBUG) console.error(`[ocr:board] y=${Math.round(l.y * yMul + yEps)}: «${l.words.map((w) => w.text).join(' ')}» + низ → ${clean(nameWords[0].text)} ${right.d.raw}`);
+      }
+      return out;
+    };
+    /* повторы одного ника внутри прохода схлопываем: нижняя строка авторитетнее,
+       но при обрезанной первой цифре (в разы меньше) — берём большую */
+    const dedupe = (rows) => {
+      const m = new Map();
+      for (const r of rows) {
+        const prev = m.get(fold(r.nickRaw));
+        if (!prev) m.set(fold(r.nickRaw), r);
+        else if (prev.y >= r.y) { if (prev.dmg * 4 < r.dmg) m.set(fold(r.nickRaw), r); }
+        else if (r.dmg * 4 >= prev.dmg) m.set(fold(r.nickRaw), r);
+      }
+      return [...m.values()];
+    };
+    const A = dedupe(rowsOf(passA.lines));
+    const B = dedupe(rowsOf(passB.lines, 0.6, 1));
+    /* слияние: B (×5) находит строки, невидимые в A, но портит значения
+       закреплённых нижних строк («24.81T» → «81T»). Поэтому строка A рядом
+       по y со строкой B с ДРУГИМ именем считается ошибкой чтения и падает
+       (имя в B надёжнее), а имя, найденное в A, никогда не перекрывается B */
+    const keptA = A.filter((a) => !B.some((b) => Math.abs(b.y - a.y) < 60 && fold(b.nickRaw) !== fold(a.nickRaw)));
+    const aNames = new Set(keptA.map((a) => fold(a.nickRaw)));
+    const rows = [...keptA, ...B.filter((b) => !aNames.has(fold(b.nickRaw)))].sort((a, b) => a.y - b.y);
+    if (process.env.OCR_DEBUG) console.error(`[ocr:board] проходы: A=${A.length}, B=${B.length}, итого ${rows.length}`);
+    return rows.length ? rows : null;
   } finally {
     await worker.terminate();
   }
