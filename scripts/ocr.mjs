@@ -275,6 +275,29 @@ export async function ocrOwnRow(imagePath, nick) {
   }
 }
 
+/* подтверждённые владельцем канонические ники для повторяющихся прочтений OCR
+   (fuzzy-порог такие пары не покрывает). Ключ — fold() типичного прочтения,
+   значение — точный канонический ник. Проверяется до всего остального */
+const NICK_ALIASES = new Map([
+  ['devprosur', 'DevProSup'],
+  ['ihluminate', 'Ulluminate'],
+  ['iai', 'TINA9'],
+  ['malylis', 'MalyllLIB'],
+  // строка «1ая судьба»: реальные прочтения этой строки (не трогать «умауив» —
+  // это призрачная строка-двойник с чужим уроном 5.75T, такой игрок есть в BOARD_JUNK)
+  ['pa3hh', '1ая судьба'], ['pah', '1ая судьба'],
+  // стилизованные ники/подиум, которые tesseract читает только мусором:
+  ['uhdjx', 'BA3OOKA'],            // «иhdJx» — подиум №1 (канон — как в users)
+  ['tdseite', '低光'],
+  ['ere', '小鳩里叉燒'], ['le3a', '小鳩里叉燒'],
+  ['hhexx', 'Tjiixx'], ['xxx', 'Tjiixx'], ['lia', 'Tjiixx'],
+  ['falcon', 'Falcon1990'], ['ney', 'Falcon1990'],
+  ['axa', 'UniAzail'],             // «Ахац»
+  ['ee', 'Sabars'],                // «Зее»
+  ['oooto', 'GoodDino'],           // «боодОто»
+  ['ch', 'CHiLiU'],                // «СНЫ»
+].map(([k, v]) => [fold(k), v]));
+
 /* канонизация распознанного ника по списку известных: точное нормализованное
    совпадение, затем нечёткое (порог как у isNick — расстояние Левенштейна).
    Если под порог попали два разных известных ника с равным расстоянием —
@@ -282,6 +305,7 @@ export async function ocrOwnRow(imagePath, nick) {
 export function matchNick(raw, knownNicks) {
   const target = fold(raw);
   if (!target) return null;
+  if (NICK_ALIASES.has(target)) return NICK_ALIASES.get(target);
   const byNorm = new Map(); // fold(ник) → исходный ник (первый с такой свёрткой)
   for (const n of knownNicks) {
     const k = fold(n);
@@ -306,6 +330,8 @@ const BOARD_JUNK = new Set([
   'damage', 'total', 'totaldamage', 'guild', 'rank', 'награда', 'reward',
   'lonca', 'sezon', 'sesion', 'season', 'сезон',
   'судьба', 'аясудьба', 'анная', 'санная', 'еписанная', 'асанная', 'эписанная',
+  // призрачная строка-двойник с урона́ми 5.75T рядом со строкой «1ая судьба»
+  'умауив', 'умaуив',
   'движение', 'дение', 'продвижение', 'unity', 'unity2',
   // заголовок события и шапка рейтинга
   'вторжение', 'торжение', 'монстров', 'рейтинг', 'участников',

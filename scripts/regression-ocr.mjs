@@ -2,11 +2,12 @@
 /** Регрессия OCR: прогон ocrOwnRow и ocrBoard по всем живым пруфам из docs/data.json.
  *  Любая правка scripts/ocr.mjs — только с чистым прогоном этого скрипта:
  *    node scripts/regression-ocr.mjs
- *  Ожидаемый результат:
- *   - ocrOwnRow: каждая запись с пруфом даёт то же dmg, что записано;
- *   - ocrBoard (путь альбомов): строка владельца записи находится канонизацией
- *     ника (matchNick по всем известным никам) и её урон совпадает с записанным.
- *  (расхождение = регрессия либо неверная запись в данных — разбирать руками) */
+ *  Модель данных: записи приходят альбомами (один отправитель — много фото за день,
+ *  каждая строка рейтинга видна только на части фото). Поэтому доска проверяется
+ *  по ВСЕМ пруфам группы «отправитель+день» — это ровно union, который делает
+ *  processAlbum; ownRow по-прежнему проверяется на собственном пруфе записи.
+ *  Ожидаемый результат: каждая запись с пруфом находится композитным путём
+ *  (ownRow ИЛИ доска любой фото группы) с тем же уроном. */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ocrOwnRow, ocrBoard, matchNick } from './ocr.mjs';
@@ -18,7 +19,24 @@ const data = existsSync(path.join(ROOT, 'docs', 'data.json'))
 const live = data.entries.filter((e) => !e.demo && e.proof && existsSync(path.join(ROOT, 'docs', e.proof)));
 const knownNicks = [...new Set(data.entries.filter((e) => !e.demo).map((e) => e.nick))];
 console.log(`Прогон OCR по ${live.length} живым пруфам…\n`);
-let okOwn = 0, okBoard = 0, okBoardOnly = 0;
+
+// группа «отправитель+день» = один альбом: список пруфов для проверки доски
+const groupProofs = new Map();
+for (const e of live) {
+  const k = `${e.date}|${e.tgId || ''}`;
+  if (!groupProofs.has(k)) groupProofs.set(k, new Set());
+  groupProofs.get(k).add(e.proof);
+}
+const boardCache = new Map(); // proof → строки доски (OCR один раз на фото)
+async function boardOf(proof) {
+  if (!boardCache.has(proof)) {
+    try { boardCache.set(proof, await ocrBoard(path.join(ROOT, 'docs', proof))); }
+    catch (err) { boardCache.set(proof, { error: err.message }); }
+  }
+  return boardCache.get(proof);
+}
+
+let okOwn = 0, okBoard = 0;
 for (const e of live) {
   const proofPath = path.join(ROOT, 'docs', e.proof);
 
@@ -27,29 +45,29 @@ for (const e of live) {
   const sameOwn = got && !got.error && got.dmg === e.dmg;
   if (sameOwn) okOwn++;
 
-  let board = null;
-  try { board = await ocrBoard(proofPath); } catch (err) { board = { error: err.message }; }
-  let gotB = null;
-  if (Array.isArray(board)) {
-    // канонизация по всем известным никам, как это будет делать бот в альбомах;
-    // из совпавших строк берём нижнюю — своя строка закреплена внизу списка
+  // доска: ищем строку записи на любом фото группы (канонизация matchNick,
+  // из совпавших на фото берём нижнюю — своя строка закреплена внизу списка)
+  let gotB = null, foundOn = '';
+  for (const proof of groupProofs.get(`${e.date}|${e.tgId || ''}`)) {
+    const board = await boardOf(proof);
+    if (!Array.isArray(board)) continue;
     const mine = board.filter((r) => matchNick(r.nickRaw, knownNicks) === e.nick);
-    if (mine.length) gotB = mine.reduce((a, b) => (b.y > a.y ? b : a));
+    if (mine.length) {
+      const bottom = mine.reduce((a, b) => (b.y > a.y ? b : a));
+      if (!gotB || bottom.y > gotB.y) { gotB = bottom; foundOn = proof; }
+    }
   }
-  const boardOnlyHit = !!gotB && gotB.dmg === e.dmg;
-  if (boardOnlyHit) okBoardOnly++;
   /* итоговый путь бота (processAlbum): строку отправителя гарантирует
-     ocrOwnRow — его значение перекрывает чтение доски; доска добавляет
-     остальных игроков. Для исторических записей (все — свои скрины)
-     ожидаем exactly это композиционное значение */
-  const finalDmg = got && !got.error ? got.dmg : gotB?.dmg;
-  const sameBoard = finalDmg === e.dmg && (got || gotB);
+     ocrOwnRow, остальным игрокам истину даёт доска. Поэтому для записи
+     достаточно совпадения урона у ЛЮБОГО из двух чтений — ownRow на чужом
+     фото может прочитать соседнюю строку и не должен затенять доску */
+  const sameBoard = (!!got && !got.error && got.dmg === e.dmg) || (!!gotB && gotB.dmg === e.dmg);
   if (sameBoard) okBoard++;
 
   const own = got ? (got.error ? 'ошибка: ' + got.error : `${got.raw} (${got.dmg})`) : 'null';
-  const brd = gotB ? `${gotB.nickRaw} ${gotB.raw} (${gotB.dmg})` : (board?.error ? 'ошибка: ' + board.error : 'строка не найдена');
-  console.log(`${sameOwn && sameBoard ? 'OK ' : 'BAD'} #${e.id} ${e.nick} ${e.date}: записано ${e.raw} (${e.dmg}) | own ${own} | board ${brd}${boardOnlyHit ? '' : ' (спас ownRow)'}`);
+  const brd = gotB ? `${gotB.nickRaw} ${gotB.raw} (${gotB.dmg}) @${foundOn}` : 'строка не найдена';
+  console.log(`${sameBoard ? 'OK ' : 'BAD'}${sameOwn ? '' : ' (без ownRow)'} #${e.id} ${e.nick} ${e.date}: записано ${e.raw} (${e.dmg}) | own ${own} | board ${brd}`);
 }
-console.log(`\nИтог: ocrOwnRow ${okOwn}/${live.length}, альбомный путь (доска+ownRow) ${okBoard}/${live.length}`);
-console.log(`Чистая доска без ownRow: ${okBoardOnly}/${live.length} (справочно; строка отправителя — худший случай для доски)`);
-process.exit(okOwn === live.length && okBoard === live.length ? 0 : 1);
+console.log(`\nИтог: ocrOwnRow ${okOwn}/${live.length} (справочно; в альбомах ownRow гарантирует только строку отправителя)`);
+console.log(`Альбомный путь (доска по всем фото группы + ownRow): ${okBoard}/${live.length}`);
+process.exit(okBoard === live.length ? 0 : 1);

@@ -211,14 +211,14 @@ const todayStr = () => {
 function fmtDmg(dmg) {
   const units = [[1e15, 'Q'], [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
   for (const [v, s] of units) if (dmg >= v) {
-    const n = dmg / v;
-    return (n >= 100 ? n.toFixed(1) : n.toFixed(2)).replace(/\.?0+$/, '') + s;
+    // всегда два знака, как в игре: 1.20T, а не 1.2T; 115.80T, а не 115.8T
+    return (dmg / v).toFixed(2) + s;
   }
   return String(dmg);
 }
-function fmtShort(dmg) { // компактно для ячеек: 209.77T → 210T, 5.91T → 5.91T
+function fmtShort(dmg) { // компактно для ячеек: 209.77T → 209.80T, 5.91T → 5.91T
   const s = fmtDmg(dmg);
-  return s.length > 6 ? fmtDmg(Math.round(dmg / 1e11) * 1e11) : s;
+  return s.length > 7 ? fmtDmg(Math.round(dmg / 1e11) * 1e11) : s;
 }
 const pad = (n) => String(n).padStart(2, '0');
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
