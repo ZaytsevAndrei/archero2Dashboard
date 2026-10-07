@@ -65,6 +65,8 @@ const I18N = {
     proofTitle: 'Открыть скриншот',
     proofAlt: 'Доказательство',
     noProof: 'Скриншот не приложен',
+    searchPlayer: 'Поиск игрока…',
+    noMatch: 'Никого не найдено',
   },
   en: {
     title: 'Unity & Unity2 — Damage calendar · Archero 2',
@@ -98,6 +100,8 @@ const I18N = {
     proofTitle: 'Open screenshot',
     proofAlt: 'Proof',
     noProof: 'No screenshot attached',
+    searchPlayer: 'Search player…',
+    noMatch: 'No matches',
   },
   vi: {
     title: 'Unity & Unity2 — Lịch sát thương · Archero 2',
@@ -131,6 +135,8 @@ const I18N = {
     proofTitle: 'Mở ảnh chụp màn hình',
     proofAlt: 'Bằng chứng',
     noProof: 'Không có ảnh chụp màn hình',
+    searchPlayer: 'Tìm kiếm người chơi…',
+    noMatch: 'Không tìm thấy',
   },
 };
 
@@ -239,6 +245,7 @@ function applyI18n() {
   document.title = L('title');
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.innerHTML = L(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = L(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = L(el.dataset.i18nPlaceholder); });
   document.querySelectorAll('[data-i18n-alt]').forEach((el) => { el.alt = L(el.dataset.i18nAlt); });
   document.querySelectorAll('#lang-switch button').forEach((b) => b.classList.toggle('active', b.dataset.lang === state.lang));
 }
@@ -435,26 +442,38 @@ function clanChip(clan) {
 }
 
 /* панель дня: урон каждого приславшего за дату. prefix = 'today' (вкладка
- * «Сегодня», всегда сегодняшний день) или 'day' (вкладка «Календаря», выбранный) */
+ * «Сегодня», всегда сегодняшний день) или 'day' (вкладка «Календаря», выбранный).
+ * Список — компактная сетка в несколько колонок; поле поиска фильтрует по нику,
+ * ранги при этом остаются позициями полного списка */
+const dayPanelCtx = {};
 function fillDayPanel(prefix, ds, map) {
   const d = Number(ds.slice(8));
   const mon = Number(ds.slice(5, 7)) - 1;
   const wd = (new Date(Number(ds.slice(0, 4)), mon, d).getDay() + 6) % 7;
+  dayPanelCtx[prefix] = { ds, map };
   const rows = [...map.values()]
     .filter((e) => e.date === ds)
     .sort((a, b) => b.dmg - a.dmg);
   const total = rows.reduce((s, e) => s + e.dmg, 0);
+  const q = ($(`${prefix}-search`)?.value || '').trim().toLowerCase();
 
-  const list = rows.length
-    ? rows.map((e, i) => `
-      <li>
-        <span class="rank">${i + 1}</span>
-        <span class="name">${esc(e.nick)}${clanChip(clanOf(e))}</span>
-        ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="${L('proofTitle')}">🧾</button>` : ''}
-        <span class="total">${fmtDmg(e.dmg)}</span>
-        <span class="bar"><i style="width:${Math.max(4, Math.round((e.dmg / rows[0].dmg) * 100))}%;background:${rankColor(i, rows.length)}"></i></span>
-      </li>`).join('')
-    : `<li class="today-none">${L('dayNone')}</li>`;
+  const seen = rows
+    .map((e, i) => ({ e, i }))
+    .filter(({ e }) => !q || e.nick.toLowerCase().includes(q));
+  const list = !rows.length
+    ? `<li class="today-none">${L('dayNone')}</li>`
+    : seen.length
+      ? seen.map(({ e, i }) => {
+        const w = Math.max(8, Math.round((e.dmg / rows[0].dmg) * 100));
+        const tint = rankColor(i, rows.length).replace('hsl(', 'hsla(').replace(')', ', 0.14)');
+        return `<li style="background:linear-gradient(90deg, ${tint} ${w}%, var(--panel-2) ${w}%)">
+          <span class="rank">${i + 1}</span>
+          <span class="name">${esc(e.nick)}${clanChip(clanOf(e))}</span>
+          ${e.proof ? `<button type="button" class="proof-btn" data-nick="${esc(e.nick)}" data-date="${ds}" title="${L('proofTitle')}">🧾</button>` : ''}
+          <span class="total">${fmtDmg(e.dmg)}</span>
+        </li>`;
+      }).join('')
+      : `<li class="today-none">${L('noMatch')}</li>`;
 
   $(`${prefix}-title`).textContent = dayTitle(d, mon, wd);
   $(`${prefix}-list`).innerHTML = list;
@@ -546,6 +565,12 @@ const openProof = (ev) => {
 };
 $('today-list').addEventListener('click', openProof);
 $('day-list').addEventListener('click', openProof);
+for (const prefix of ['today', 'day']) {
+  $(`${prefix}-search`).addEventListener('input', () => {
+    const ctx = dayPanelCtx[prefix];
+    if (ctx) fillDayPanel(prefix, ctx.ds, ctx.map);
+  });
+}
 $('popup-close').onclick = () => { $('cell-popup').hidden = true; };
 $('cell-popup').addEventListener('click', (ev) => { if (ev.target === $('cell-popup')) $('cell-popup').hidden = true; });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('cell-popup').hidden = true; });

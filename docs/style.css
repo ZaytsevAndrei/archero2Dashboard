@@ -272,6 +272,46 @@ header {
 .leaderboard .total { grid-column: 3; grid-row: 1; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
 .leaderboard .meta { grid-column: 2 / -1; grid-row: 3; color: var(--muted); font-size: 12px; margin-top: -2px; }
 
+/* ---------- компактная сетка списка дня ----------
+   47 строк одной лентой мотать неудобно: на десктопе 2–3 колонки плотных
+   строк; урон показан тоновой подложкой строки (заливка ~ доле от лидера) */
+.board-search {
+  width: 100%;
+  margin: 0 0 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+}
+.board-search:focus { outline: none; border-color: var(--accent); }
+.board-search::placeholder { color: var(--muted); }
+
+.leaderboard.day-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 255px), 1fr));
+  gap: 4px 8px;
+}
+.leaderboard.day-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.leaderboard.day-list li.today-none { grid-column: 1 / -1; }
+.leaderboard.day-list .rank { width: 24px; flex: none; font-size: 13px; text-align: right; }
+.leaderboard.day-list .name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 14px; font-weight: 600;
+}
+.leaderboard.day-list .total { font-size: 13px; margin-left: auto; }
+.leaderboard.day-list .proof-btn { flex: none; padding: 1px 6px; font-size: 11px; }
+
 .howto { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .howto a { color: var(--accent); }
 
