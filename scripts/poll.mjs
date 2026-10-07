@@ -483,7 +483,10 @@ async function processAlbum(uid, chatId, items) {
   for (const s of config.submitters) if (s.nick && s.clan) clanByNick.set(norm(s.nick), s.clan);
   for (const u of Object.values(data.users)) if (u.nick && u.clan) clanByNick.set(norm(u.nick), u.clan);
 
-  const recorded = new Map(); // norm(ник) → что в итоге записано (для ответа)
+  /* фаза 1: собрать кандидатов со всех скринов альбома. Один и тот же игрок
+   * виден на нескольких скринах, и OCR читает его имя по-разному — финальный
+   * выбор делает голосование (фаза 2), а не порядок картинок */
+  const found = []; // { nick, dmg, raw, clan, date, ts, it, proof }
   let failed = 0;
   for (const it of items) {
     const proof = await downloadProof(it.fileId, it.msgId);
@@ -506,16 +509,47 @@ async function processAlbum(uid, chatId, items) {
     const date = gameDate(ts);
     for (const r of rows) {
       const nick = matchNick(r.nickRaw, knownNicks) || r.nickRaw;
-      const clan = clanByNick.get(norm(nick)) || senderClan;
-      data.entries = data.entries.filter((e) => !(e.nick === nick && e.date === date && e.clan === clan && !e.demo));
-      data.entries.push({
-        id: String(it.msgId), via: uid, grp: it.grp, nick, date, dmg: r.dmg, raw: r.raw, ts, clan,
-        ...(proof ? { proof } : {}),
-      });
-      recorded.set(norm(nick), { nick, dmg: r.dmg, raw: r.raw, clan });
+      found.push({ nick, dmg: r.dmg, raw: r.raw, clan: clanByNick.get(norm(nick)) || senderClan, date, ts, it, proof });
     }
-    saveData(); // после каждого скрина: краш не должен съедать весь альбом
   }
+
+  /* фаза 2 — голосование по значению урона за день: подиум и закреплённые
+   * строки читаются мусорными именами («эчаскег», «Рая»), но настоящее имя
+   * повторяется на нескольких скринах, а мусор почти никогда. Правила:
+   *  - есть канонический (известный) ник — он побеждает мусор;
+   *  - иначе побеждает имя, встреченное на ≥2 скринах;
+   *  - консенсуса нет — оставляем всех (двое реальных с равным уроном бывает) */
+  const byDmg = new Map(); // date:dmg → кандидаты
+  for (const f of found) {
+    const k = `${f.date}:${f.dmg}`;
+    if (!byDmg.has(k)) byDmg.set(k, []);
+    byDmg.get(k).push(f);
+  }
+  const recorded = new Map(); // norm(ник) → финальная запись (для записи и ответа)
+  for (const g of byDmg.values()) {
+    const uniq = [...new Map(g.map((x) => [norm(x.nick), x])).values()];
+    const canon = uniq.filter((x) => matchNick(x.nick, knownNicks) === x.nick);
+    let pick;
+    if (canon.length) pick = canon;
+    else {
+      const freq = new Map();
+      for (const x of g) freq.set(norm(x.nick), (freq.get(norm(x.nick)) || 0) + 1);
+      const best = Math.max(...freq.values());
+      pick = best >= 2 ? uniq.filter((x) => freq.get(norm(x.nick)) === best) : uniq;
+    }
+    for (const x of pick) recorded.set(norm(x.nick), x);
+  }
+
+  for (const r of recorded.values()) {
+    // повторная отправка за тот же день перезаписывает запись игрока
+    data.entries = data.entries.filter((e) => !(e.nick === r.nick && e.date === r.date && e.clan === r.clan && !e.demo));
+    data.entries.push({
+      id: String(r.it.msgId), via: uid, grp: r.it.grp, nick: r.nick, date: r.date,
+      dmg: r.dmg, raw: r.raw, ts: r.ts, clan: r.clan,
+      ...(r.proof ? { proof: r.proof } : {}),
+    });
+  }
+  if (found.length) saveData();
 
   delete data.state[uid];
   if (!recorded.size) {

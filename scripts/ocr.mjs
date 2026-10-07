@@ -171,7 +171,12 @@ export async function ocrOwnRow(imagePath, nick) {
   try {
     const { lines, CROP_TOP, SCALE, width, height } = await mainPass(img, imagePath, worker);
     const nickRe = /^[A-Za-zА-Яа-я0-9_.-]{3,16}$/;
-    const isNick = (t) => { const c = clean(t); return nickRe.test(c) && lev(c.toLowerCase(), nick.toLowerCase()) <= Math.max(2, nick.length * 0.34); };
+    const isNick = (t) => {
+      const c = clean(t);
+      if (!nickRe.test(c)) return false;
+      const thr = nick.length <= 4 ? 1 : Math.max(2, nick.length * 0.34); // короткие — строже
+      return lev(c.toLowerCase(), nick.toLowerCase()) <= thr;
+    };
     const toksOf = (l) => (l ? l.words.map(w => w.text) : []);
     /* урон игрока не бывает левее его ника: в списке он правее ника в той же
        строке, на подиуме — под именем. Числа левее ника в той же полосе — чужие
@@ -285,19 +290,26 @@ export function matchNick(raw, knownNicks) {
   if (byNorm.has(target)) return byNorm.get(target);
   const cands = [...byNorm.keys()]
     .map((k) => ({ k, d: lev(k, target) }))
-    .filter((c) => c.d <= Math.max(2, c.k.length * 0.34))
+    // короткие ники (≤4) — только расстояние 1: при допуске 2 под «CGR»
+    // подходит любой трёхбуквенный мусор («судьб» → «cyb»)
+    .filter((c) => c.d <= (c.k.length <= 4 ? 1 : Math.max(2, c.k.length * 0.34)))
     .sort((a, b) => a.d - b.d);
   if (!cands.length || (cands.length > 1 && cands[0].d === cands[1].d)) return null;
   return byNorm.get(cands[0].k);
 }
 
-/* служебные надписи рейтинга, которые легко принять за ник («общий урон»,
-   «Sezon/Sesion» — скрины бывают на турецком и других языках) */
+/* служебные надписи рейтинга, которые легко принять за ник («общий урон» и пр.),
+   плюс бейджи гильдий под никами («…ая судьба», «движение», «unity»). Ключи
+   сразу сворачиваем fold()-ом: проверка идёт по свёрнутому имени */
 const BOARD_JUNK = new Set([
   'общийурон', 'общий', 'урон', 'гильдии', 'уронгильдии', 'общ', 'босс', 'boss',
   'damage', 'total', 'totaldamage', 'guild', 'rank', 'награда', 'reward',
   'lonca', 'sezon', 'sesion', 'season', 'сезон',
-]);
+  'судьба', 'аясудьба', 'анная', 'санная', 'еписанная', 'асанная', 'эписанная',
+  'движение', 'дение', 'продвижение', 'unity', 'unity2',
+  // заголовок события и шапка рейтинга
+  'вторжение', 'торжение', 'монстров', 'рейтинг', 'участников',
+].map(fold));
 
 /* все токены-урон в наборе (со склейкой оторванного суффикса): [{ d, idx }] */
 function allDmg(toks) {
@@ -311,6 +323,79 @@ function allDmg(toks) {
     if (d) out.push({ d, idx: i });
   }
   return out;
+}
+
+/* подиум топ-3 в верхней части скрина (новый формат рейтинга): на каждом
+ * пьедестале имя, под ним бейдж гильдии и урон; урон набран крупным шрифтом и
+ * нередко разваливается на вертикальные фрагменты («397.» + «63T»). Сканируем
+ * область над началом списка (первый ранг слева): слова обоих проходов
+ * (B переводим в координаты A), фрагменты чисел склеиваем в колонках, имя =
+ * верхний токен колонки (имя выше бейджа), пары «имя ↔ урон» — по близости
+ * колонок, урон не выше и не сильно ниже имени. */
+function scanPodium(passA, passB) {
+  const widthA = passA.width * passA.SCALE; // координаты слов — в масштабе прохода A
+  const rankLine = passA.lines.find((l) => l.words.some((w) => {
+    const c = clean(w.text);
+    return /^\d{1,2}$/.test(c) && w.x < widthA * 0.14; // ранг списка — слева
+  }));
+  if (!rankLine) return [];
+  const yMax = rankLine.y;
+  const words = [
+    ...passA.lines.flatMap((l) => l.words),
+    ...passB.lines.flatMap((l) => l.words.map((w) => ({ ...w, x: w.x * 0.6, y: w.y * 0.6 }))),
+  ].filter((w) => w.y < yMax);
+  if (process.env.OCR_DEBUG === '2') console.error(`[ocr:podium] yMax=${yMax}, слов в зоне: ${words.length}`);
+
+  // урон-кандидаты: числовые токены, фрагменты одной колонки склеиваем
+  const numericish = (t) => /\d/.test(t) && !/[A-Za-zА-Яа-я]{2}/.test(t);
+  const frags = [];
+  for (const w of words.filter((w) => numericish(w.text)).sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const c = frags.find((f) => Math.abs(f.x - w.x) < 130 && Math.abs(f.y - w.y) < 130);
+    if (c) { c.toks.push(w); c.y = Math.max(c.y, w.y); c.x = Math.min(c.x, w.x); }
+    else frags.push({ x: w.x, y: w.y, toks: [w] });
+  }
+  const dmgs = [];
+  for (const f of frags) {
+    f.toks.sort((a, b) => a.y - b.y || a.x - b.x);
+    const glued = parseDamageToken(f.toks.map((t) => t.text).join(''));
+    const d = glued || f.toks.map((t) => parseDamageToken(t.text)).find(Boolean);
+    if (d) dmgs.push({ x: f.x, y: f.y, d });
+  }
+  if (!dmgs.length) return [];
+  // обрывки-суффиксы: «63T» — хвост «397.63T»; на подиуме мелких значений не бывает
+  dmgs.sort((a, b) => b.d.dmg - a.d.dmg);
+  const real = dmgs.filter((d, i) => !(d.d.raw.length <= 5 && dmgs.slice(0, i).some((b) => b.d.dmg > d.d.dmg && b.d.raw.endsWith(d.d.raw))));
+
+  // имена: колонки по x; колонку возглавляет верхний токен, под которым в той же
+  // колонке есть урон на расстоянии 80–320 (имя выше бейджа гильдии и ближе к
+  // числу, чем мусор аватарки над ним)
+  const cols = [];
+  for (const w of words
+    .filter((w) => /^[A-Za-zА-Яа-я][A-Za-zА-Яа-я0-9_.-]{2,15}$/.test(clean(w.text)) && !BOARD_JUNK.has(fold(clean(w.text))) && !parseDamageToken(clean(w.text)))
+    .sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const hasDmgBelow = real.some((d) => d.y >= w.y + 80 && d.y - w.y <= 320 && Math.abs(d.x - w.x) < 350);
+    if (!hasDmgBelow) continue;
+    if (!cols.some((c) => Math.abs(c.x - w.x) < 160)) cols.push({ x: w.x, top: w });
+  }
+  // пары: урон ниже имени в той же колонке, каждый токен — один раз
+  const pairs = [];
+  for (const c of cols) {
+    for (const d of real) {
+      const dy = d.y - c.top.y;
+      if (dy < 80 || dy > 320) continue; // имя выше урона, но не через полэкрана
+      const dist = Math.abs(d.x - c.x);
+      if (dist < 350) pairs.push({ name: clean(c.top.text), d, dist, y: c.top.y });
+    }
+  }
+  pairs.sort((a, b) => a.dist - b.dist);
+  const rows = [], usedName = new Set(), usedDmg = new Set();
+  for (const p of pairs) {
+    if (usedName.has(p.name) || usedDmg.has(p.d.d.dmg)) continue;
+    usedName.add(p.name); usedDmg.add(p.d.d.dmg);
+    rows.push({ nickRaw: p.name, dmg: p.d.d.dmg, raw: p.d.d.raw, y: p.y });
+    if (process.env.OCR_DEBUG) console.error(`[ocr:podium] y=${Math.round(p.y)}: ${p.name} ${p.d.d.raw} (Δx=${Math.round(p.dist)})`);
+  }
+  return rows;
 }
 
 /* все строки рейтинга со скрина. Один скрин закрывает несколько игроков
@@ -342,6 +427,7 @@ export async function ocrBoard(imagePath) {
       const push = (name, d, y) => {
         if (name.length < 3 || name.length > 24) return; // игровые ники — от 3 символов
         if (BOARD_JUNK.has(fold(name))) return;
+        if (parseDamageToken(name)) return; // «63T» — обрывок числа, не ник
         out.push({ nickRaw: name, dmg: d.dmg, raw: d.raw, y: y * yMul + yEps });
       };
       for (let i = 0; i < ls.length; i++) {
@@ -358,21 +444,27 @@ export async function ocrBoard(imagePath) {
           if (process.env.OCR_DEBUG) console.error(`[ocr:board] y=${Math.round(l.y * yMul + yEps)}: «${l.words.map((w) => w.text).join(' ')}» → ${names.join('')} ${right.d.raw}`);
           continue;
         }
-        // строка без чисел: ровно один похожий на ник токен + урон строкой ниже
-        // правее него — так читается большинство строк списка
+        // строка без чисел: ровно один похожий на ник токен + самое правое число
+        // строкой ниже правее него; между именем и числом бывает строка ранга
+        // или бейджа гильдии — смотрим на две строки вниз, но не дальше чужого имени
         const nameWords = l.words.filter((w) => /^[A-Za-zА-Яа-я][A-Za-zА-Яа-я0-9_.-]{2,15}$/.test(clean(w.text)));
         if (nameWords.length !== 1) continue;
-        const below = ls[i + 1];
-        if (!below) continue;
-        const candWords = below.words.filter((w) => w.x >= nameWords[0].x - XT);
-        const candHits = allDmg(candWords.map((w) => w.text));
-        if (!candHits.length) continue;
-        const right = candHits.reduce((a, b) => (candWords[b.idx].x >= candWords[a.idx].x ? b : a));
-        // урон не должен иметь букв левее себя в нижней строке — иначе это чужая
-        // строка «ник + урон», а не число нашего игрока
-        if (candWords.slice(0, right.idx).some((w) => /[A-Za-zА-Яа-я]/.test(clean(w.text)))) continue;
-        push(clean(nameWords[0].text), right.d, l.y);
-        if (process.env.OCR_DEBUG) console.error(`[ocr:board] y=${Math.round(l.y * yMul + yEps)}: «${l.words.map((w) => w.text).join(' ')}» + низ → ${clean(nameWords[0].text)} ${right.d.raw}`);
+        for (let j = 1; j <= 2; j++) {
+          const below = ls[i + j];
+          if (!below) break;
+          const hasName = below.words.some((w) => /^[A-Za-zА-Яа-я][A-Za-zА-Яа-я0-9_.-]{2,15}$/.test(clean(w.text)) && !BOARD_JUNK.has(fold(clean(w.text))));
+          if (hasName) break; // имя другого игрока — урон ниже уже его
+          const candWords = below.words.filter((w) => w.x >= nameWords[0].x - XT);
+          const candHits = allDmg(candWords.map((w) => w.text));
+          if (!candHits.length) continue;
+          const right = candHits.reduce((a, b) => (candWords[b.idx].x >= candWords[a.idx].x ? b : a));
+          // урон не должен иметь букв левее себя в нижней строке — иначе это чужая
+          // строка «ник + урон», а не число нашего игрока
+          if (candWords.slice(0, right.idx).some((w) => /[A-Za-zА-Яа-я]/.test(clean(w.text)))) break;
+          push(clean(nameWords[0].text), right.d, l.y);
+          if (process.env.OCR_DEBUG) console.error(`[ocr:board] y=${Math.round(l.y * yMul + yEps)}: «${l.words.map((w) => w.text).join(' ')}» + низ(${j}) → ${clean(nameWords[0].text)} ${right.d.raw}`);
+          break;
+        }
       }
       return out;
     };
@@ -388,7 +480,7 @@ export async function ocrBoard(imagePath) {
       }
       return [...m.values()];
     };
-    const A = dedupe(rowsOf(passA.lines));
+    const A = dedupe([...scanPodium(passA, passB), ...rowsOf(passA.lines)]);
     const B = dedupe(rowsOf(passB.lines, 0.6, 1));
     /* слияние: B (×5) находит строки, невидимые в A, но портит значения
        закреплённых нижних строк («24.81T» → «81T»). Поэтому строка A рядом
